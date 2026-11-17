@@ -7,8 +7,8 @@ coverage/
 !.env.example
 .DS_Store
 
-# Réglages Claude Code personnels
-.claude/settings.local.json
+# Outils personnels (Claude Code : réglages, skills)
+.claude/
 
 # Catalogue SQLite généré par le script de synchro
 server/data/*.db

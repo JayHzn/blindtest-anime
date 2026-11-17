@@ -37,21 +37,3 @@ npm run dev                        # back sur :3001, front sur http://localhost:
 | `npm run catalogue:sync -w server [-- --cached]` | Synchro du catalogue (`--cached` : réutilise les API)  |
 | `npm run catalogue:check -w server`              | Diagnostic du catalogue (taille, vitesse de recherche) |
 | `npm run smoke -w server`                        | Joue une manche contre un serveur qui tourne           |
-
-## Mise en ligne (Render)
-
-Le fichier [`render.yaml`](render.yaml) décrit deux services gratuits :
-
-| Service       | Adresse                          | Rôle                                  |
-| ------------- | -------------------------------- | ------------------------------------- |
-| `anilind`     | https://anilind.onrender.com     | Site statique (CDN, jamais en veille) |
-| `anilind-api` | https://anilind-api.onrender.com | API, WebSockets, proxy audio/vidéo    |
-
-1. Sur Render : **New → Blueprint**, choisir ce dépôt GitHub, valider.
-2. Premier build du serveur : environ 5 min (génération du catalogue).
-3. Si Render attribue une autre adresse (nom pris), corriger `CLIENT_ORIGIN`
-   (serveur) et `VITE_SERVER_URL` (site) dans le tableau de bord, puis redéployer.
-
-Chaque `git push` sur `main` redéploie automatiquement. Le serveur gratuit se
-met en veille après 15 min sans visite : le site le réveille dès l'ouverture
-(environ 1 min au premier chargement).
