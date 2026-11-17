@@ -8,11 +8,12 @@ const toInt = (value: string | undefined, fallback: number): number => {
 export const config = {
   port: toInt(process.env.PORT, 3001),
   host: process.env.HOST ?? '0.0.0.0',
-  /** Origines autorisées (front), séparées par des virgules. */
+  /** Origines autorisées (front), séparées par des virgules ; « https:// » ajouté si absent. */
   clientOrigins: (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
     .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+    .map((origin) => (/^https?:\/\//.test(origin) ? origin : `https://${origin}`)),
   /** Base SQLite générée par `npm run catalogue:sync`. */
   cataloguePath:
     process.env.CATALOGUE_PATH ?? fileURLToPath(new URL('../data/catalogue.db', import.meta.url)),

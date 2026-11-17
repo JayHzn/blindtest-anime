@@ -1,0 +1,49 @@
+# Déploiement Render (Blueprint) : deux services gratuits.
+#  - blindtest-anime      : le site (statique, servi par le CDN de Render, jamais en veille)
+#  - blindtest-anime-api  : le serveur (API, WebSockets, proxy audio/vidéo ; se met en veille après 15 min)
+#
+# Si Render attribue une adresse différente (nom déjà pris), mettre à jour
+# CLIENT_ORIGIN et VITE_SERVER_URL dans le tableau de bord, puis redéployer.
+services:
+  - type: web
+    name: blindtest-anime-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    # Le catalogue (AnimeThemes + AniList + Wikidata) est généré à chaque build (~5 min).
+    # Si la synchro échoue, le build échoue et Render garde la version en ligne.
+    buildCommand: npm ci && npm run catalogue:sync -w server && npm run build -w server
+    startCommand: npm run start -w server
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_ORIGIN
+        value: https://blindtest-anime.onrender.com
+
+  - type: web
+    name: blindtest-anime
+    runtime: static
+    buildCommand: npm ci && npm run build -w client
+    staticPublishPath: client/dist
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: VITE_SERVER_URL
+        value: https://blindtest-anime-api.onrender.com
+    headers:
+      # Fichiers versionnés (hash dans le nom) : cache navigateur d'un an.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

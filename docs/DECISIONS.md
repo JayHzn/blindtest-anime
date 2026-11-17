@@ -63,6 +63,12 @@ Validé le 2026-11-17.
   - Tarifs à revérifier sur la page officielle au moment de l'étape 6.
 - Le front ping le back dès l'ouverture du site pour le réveiller (indicateur « Connexion au serveur… / Prêt »).
 - Développement en local d'abord.
+- Mise en ligne (étape 6), décidée le 2026-11-17 : **en deux temps**.
+  1. Render d'abord, avec le proxy audio/vidéo vers AnimeThemes (déjà testé), pour jouer tout de suite.
+  2. Miroir audio R2 + Worker ensuite.
+  - Blueprint `render.yaml` : `blindtest-anime` (static site) et `blindtest-anime-api` (web service, Francfort), adresses fixées dans la config (noms libres au 2026-11-17).
+  - Catalogue généré au build du serveur (~5 min) ; un build qui échoue laisse la version en ligne.
+  - Code publié sur le dépôt GitHub public `JayHzn/blindtest-anime` (aucun secret dans le dépôt).
 
 ## Contenu & filtres
 
