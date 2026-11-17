@@ -38,6 +38,10 @@ export interface AnimeRow {
   popularity: number;
   /** 1 = le plus populaire. */
   popularityRank: number;
+  /** Jaquette AniList (repli de la vidéo à la révélation). */
+  coverUrl: string | null;
+  /** Couleur dominante de la jaquette (ex. « #e4a15d »). */
+  coverColor: string | null;
 }
 
 export interface ThemeRow {

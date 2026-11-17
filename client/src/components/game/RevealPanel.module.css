@@ -39,7 +39,11 @@
   justify-content: center;
   gap: var(--space-2);
   padding: var(--space-5);
-  background: linear-gradient(135deg, var(--color-surface-3), var(--color-surface-hover));
+  overflow: hidden;
+  background: var(
+    --cover-color,
+    linear-gradient(135deg, var(--color-surface-3), var(--color-surface-hover))
+  );
   text-align: center;
   transition: opacity 0.4s;
 }
@@ -50,15 +54,48 @@
 }
 
 .placeholderTitle {
+  position: relative;
   font-family: var(--font-display);
   font-size: clamp(24px, 4vw, 40px);
   font-weight: 700;
 }
 
+/* Fond : la jaquette floutée et assombrie, pour que la jaquette nette ressorte. */
+.coverBackdrop {
+  position: absolute;
+  inset: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  object-fit: cover;
+  filter: blur(28px) brightness(0.5) saturate(1.2);
+}
+
+.cover {
+  position: relative;
+  height: 88%;
+  max-width: 60%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 20px 50px rgb(0 0 0 / 0.55);
+  animation: coverIn 0.5s var(--ease-out);
+}
+
 .placeholderNote {
+  position: absolute;
+  bottom: var(--space-3);
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+  background: rgb(27 20 36 / 0.75);
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
+}
+
+@keyframes coverIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
 }
 
 .info {

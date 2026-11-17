@@ -29,7 +29,9 @@ CREATE TABLE anime (
   anilist_id INTEGER,
   mal_id INTEGER,
   popularity INTEGER NOT NULL,
-  popularity_rank INTEGER NOT NULL
+  popularity_rank INTEGER NOT NULL,
+  cover_url TEXT,
+  cover_color TEXT
 );
 CREATE INDEX anime_franchise ON anime(franchise_id);
 
@@ -65,9 +67,9 @@ export function writeCatalogue(db: Database.Database, data: CatalogueData): void
   );
   const insertAnime = db.prepare(`
     INSERT INTO anime (id, slug, franchise_id, name, title_romaji, title_en, title_fr, year, season,
-      media_format, anilist_id, mal_id, popularity, popularity_rank)
+      media_format, anilist_id, mal_id, popularity, popularity_rank, cover_url, cover_color)
     VALUES (@id, @slug, @franchiseId, @name, @titleRomaji, @titleEn, @titleFr, @year, @season,
-      @mediaFormat, @anilistId, @malId, @popularity, @popularityRank)`);
+      @mediaFormat, @anilistId, @malId, @popularity, @popularityRank, @coverUrl, @coverColor)`);
   const insertTheme = db.prepare(`
     INSERT INTO theme (id, anime_id, type, sequence, slug, song_title, artists, audio_url,
       video_url, video_resolution, spoiler)
@@ -99,7 +101,8 @@ export function readCatalogue(db: Database.Database): CatalogueData {
     .prepare(
       `SELECT id, slug, franchise_id AS franchiseId, name, title_romaji AS titleRomaji,
         title_en AS titleEn, title_fr AS titleFr, year, season, media_format AS mediaFormat,
-        anilist_id AS anilistId, mal_id AS malId, popularity, popularity_rank AS popularityRank
+        anilist_id AS anilistId, mal_id AS malId, popularity, popularity_rank AS popularityRank,
+        cover_url AS coverUrl, cover_color AS coverColor
        FROM anime`,
     )
     .all() as AnimeRow[];

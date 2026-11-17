@@ -372,6 +372,8 @@ export class Game {
         },
         romaji: anime.titleRomaji ?? anime.name,
         year: anime.year,
+        coverUrl: anime.coverUrl,
+        coverColor: anime.coverColor,
       },
       franchise: {
         id: franchise.id,

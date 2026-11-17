@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { RoundReveal } from '@blindtest/shared';
 import type { GameSession } from '../../game/GameSession';
 import { secondsLeft, useServerNow } from '../../hooks/useServerNow';
@@ -72,8 +72,23 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
     <div className={styles.panel}>
       <div className={styles.media}>
         <div ref={host} className={styles.videoHost} />
-        <div className={[styles.placeholder, showCard ? '' : styles.hidden].join(' ')}>
-          <span className={styles.placeholderTitle}>{title}</span>
+        {/* Jaquette tant que la vidéo charge, ou à sa place si elle échoue. */}
+        <div
+          className={[styles.placeholder, showCard ? '' : styles.hidden].join(' ')}
+          style={
+            reveal.anime.coverColor
+              ? ({ '--cover-color': reveal.anime.coverColor } as CSSProperties)
+              : undefined
+          }
+        >
+          {reveal.anime.coverUrl ? (
+            <>
+              <img className={styles.coverBackdrop} src={reveal.anime.coverUrl} alt="" />
+              <img className={styles.cover} src={reveal.anime.coverUrl} alt={title} />
+            </>
+          ) : (
+            <span className={styles.placeholderTitle}>{title}</span>
+          )}
           {!hasVideo || failed ? (
             <span className={styles.placeholderNote}>{t('game.reveal.noVideo')}</span>
           ) : null}

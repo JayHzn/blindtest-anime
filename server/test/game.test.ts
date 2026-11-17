@@ -91,6 +91,10 @@ describe('Game — mode Classique', () => {
     vi.advanceTimersByTime(0);
     const reveal = t.last<RoundReveal>('round:reveal');
     expect(reveal.anime.title.fr).toBe("L'Attaque des Titans — Saison 3");
+    expect(reveal.anime).toMatchObject({
+      coverUrl: 'https://img.anili.st/media/99147.jpg',
+      coverColor: '#e4a15d',
+    });
     expect(reveal.theme).toMatchObject({ type: 'OP', sequence: 1 });
     expect(reveal.results[0]).toMatchObject({ playerId: 'p1', correct: true, points: 220 });
     expect(reveal.players[0]?.score).toBe(220);

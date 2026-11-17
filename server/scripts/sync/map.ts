@@ -176,6 +176,8 @@ export function buildCatalogueData(sources: SyncSources): CatalogueData {
       malId: externalId(anime, 'MAL'),
       popularity: media?.popularity ?? 0,
       popularityRank: 0,
+      coverUrl: media?.coverImage?.extraLarge ?? null,
+      coverColor: media?.coverImage?.color ?? null,
     });
 
     const animeTitles = [

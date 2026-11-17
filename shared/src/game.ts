@@ -148,7 +148,15 @@ export interface LocalizedTitle {
 export interface RoundReveal {
   round: number;
   phaseEndsAt: number;
-  anime: { id: number; title: LocalizedTitle; romaji: string; year: number | null };
+  anime: {
+    id: number;
+    title: LocalizedTitle;
+    romaji: string;
+    year: number | null;
+    /** Jaquette (affichée tant que la vidéo charge, ou à sa place). */
+    coverUrl: string | null;
+    coverColor: string | null;
+  };
   franchise: { id: number; title: LocalizedTitle };
   theme: {
     type: ThemeType;
