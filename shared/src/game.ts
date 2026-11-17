@@ -157,8 +157,6 @@ export interface RoundReveal {
     song: string | null;
     artists: string | null;
   };
-  /** Vidéo de l'opening (CDN AnimeThemes), révélée seulement maintenant. */
-  videoUrl: string | null;
   results: PlayerRoundResult[];
   players: PlayerScore[];
 }

@@ -16,7 +16,7 @@ import {
   type RoundReveal,
   type ServerToClientEvents,
 } from '@blindtest/shared';
-import { audioPath, type AudioRegistry } from '../audio/AudioRegistry';
+import { audioPath, videoPath, type MediaRegistry } from '../media/MediaRegistry';
 import type { Catalogue } from '../catalogue/Catalogue';
 import type { ThemeRow } from '../catalogue/types';
 
@@ -48,7 +48,10 @@ interface PlayerState {
 
 interface RoundState {
   theme: ThemeRow;
+  /** Jeton opaque de l'audio. */
   token: string;
+  /** Jeton opaque de la vidéo, créé au début de l'écoute. */
+  videoToken: string | null;
   startRatio: number;
   listenStartedAt: number | null;
   results: Map<string, PlayerRoundResult>;
@@ -58,7 +61,7 @@ export interface GameOptions {
   id?: string;
   settings: GameSettings;
   catalogue: Catalogue;
-  audio: AudioRegistry;
+  media: MediaRegistry;
   emitter: GameEmitter;
   /** Musiques tirées : les premières sont jouées, le reste sert de remplaçantes. */
   themes: ThemeRow[];
@@ -77,7 +80,7 @@ export class Game {
   readonly settings: GameSettings;
   readonly timing: ModeTiming;
   private readonly catalogue: Catalogue;
-  private readonly audio: AudioRegistry;
+  private readonly media: MediaRegistry;
   private readonly emitter: GameEmitter;
   private readonly random: () => number;
   private readonly onFinished?: (game: Game) => void;
@@ -98,7 +101,7 @@ export class Game {
     this.settings = options.settings;
     this.timing = MODE_TIMINGS[options.settings.mode];
     this.catalogue = options.catalogue;
-    this.audio = options.audio;
+    this.media = options.media;
     this.emitter = options.emitter;
     this.random = options.random ?? Math.random;
     this.onFinished = options.onFinished;
@@ -177,7 +180,7 @@ export class Game {
     if (!notStartedYet) return;
 
     const replacement = this.spares.shift();
-    this.audio.revoke(target.token);
+    this.media.revoke(target.token);
     if (!replacement) {
       this.handleNoReplacement(round);
       return;
@@ -240,7 +243,7 @@ export class Game {
     if (this.closed) return;
     this.closed = true;
     this.clearTimer();
-    for (const round of this.rounds) this.audio.revoke(round.token);
+    for (const round of this.rounds) this.revokeRound(round);
     this.onFinished?.(this);
   }
 
@@ -271,10 +274,15 @@ export class Game {
     this.phase = 'listening';
     round.listenStartedAt = Date.now();
     this.phaseEndsAt = round.listenStartedAt + this.timing.listenMs;
+    // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque.
+    if (round.theme.videoUrl && !round.videoToken) {
+      round.videoToken = this.media.register(round.theme.videoUrl, 'video');
+    }
     this.emitter.toAll('round:start', {
       round: this.roundIndex,
       startedAt: round.listenStartedAt,
       phaseEndsAt: this.phaseEndsAt,
+      videoUrl: round.videoToken ? videoPath(round.videoToken) : null,
     });
     // Préchargement de la manche suivante pendant l'écoute.
     if (this.roundIndex + 1 < this.totalRounds) this.emitPrepare(this.roundIndex + 1);
@@ -304,7 +312,7 @@ export class Game {
       return;
     }
     // Plus de musique de rechange : la partie s'arrête avant la manche injouable.
-    for (const removed of this.rounds.splice(round)) this.audio.revoke(removed.token);
+    for (const removed of this.rounds.splice(round)) this.revokeRound(removed);
     if (round === this.roundIndex) this.finish('completed');
   }
 
@@ -313,11 +321,17 @@ export class Game {
   private createRound(theme: ThemeRow): RoundState {
     return {
       theme,
-      token: this.audio.register(theme.audioUrl),
+      token: this.media.register(theme.audioUrl),
       startRatio: Math.round(this.random() * START_RATIO_MAX * 1000) / 1000,
+      videoToken: null,
       listenStartedAt: null,
       results: new Map(),
     };
+  }
+
+  private revokeRound(round: RoundState): void {
+    this.media.revoke(round.token);
+    if (round.videoToken) this.media.revoke(round.videoToken);
   }
 
   private emitPrepare(index: number): void {
@@ -373,7 +387,6 @@ export class Game {
         song: theme.songTitle,
         artists: theme.artists,
       },
-      videoUrl: theme.videoUrl,
       results,
       players: this.scoreboard(),
     };

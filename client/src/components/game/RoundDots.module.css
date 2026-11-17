@@ -1,0 +1,27 @@
+.dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 420px;
+}
+
+.dot {
+  width: 24px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-3);
+  transition: background-color 0.3s;
+}
+
+.current {
+  background: var(--color-accent);
+}
+
+.found {
+  background: var(--color-mint);
+}
+
+.missed {
+  background: var(--color-lavender);
+  opacity: 0.45;
+}

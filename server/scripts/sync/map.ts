@@ -18,13 +18,17 @@ export interface SyncSources {
   wikidata: WikidataLabel[];
 }
 
-/** Préférence de vidéo : sans scènes d'épisode, sans crédits, en 720p (léger pour la révélation). */
+/**
+ * Préférence de vidéo : sans scènes d'épisode, sans crédits, puis la plus légère
+ * (la vidéo transite par notre proxy et se précharge pendant les 15 s d'écoute).
+ */
 function videoScore(video: AtVideo): number {
   let score = 0;
   if (video.overlap === 'NONE') score += 4;
   if (video.nc) score += 2;
-  if (video.resolution === 720) score += 2;
-  else if (video.resolution === 480) score += 1;
+  // Départage : résolution la plus basse (au moins 360p).
+  const resolution = video.resolution ?? 1080;
+  if (resolution >= 360) score += (1080 - resolution) / 1000;
   return score;
 }
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { storage, STORAGE_KEYS } from '../lib/storage';
 import { en } from './en';
 import { fr, type MessageKey } from './fr';
-import { I18nContext, LANGS, type Lang } from './context';
+import { I18nContext, interpolate, LANGS, type Lang, type MessageVars } from './context';
 
 const dictionaries: Record<Lang, Record<MessageKey, string>> = { fr, en };
 
@@ -25,7 +25,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ lang, setLang, t: (key: MessageKey) => dictionaries[lang][key] }),
+    () => ({
+      lang,
+      setLang,
+      t: (key: MessageKey, vars?: MessageVars) => interpolate(dictionaries[lang][key], vars),
+    }),
     [lang, setLang],
   );
 

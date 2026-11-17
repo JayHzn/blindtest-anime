@@ -6,31 +6,6 @@
   gap: var(--space-6);
 }
 
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.logo {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 26px;
-}
-
-.logoAccent {
-  color: var(--color-accent);
-}
-
-.headerRight {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
 .main {
   flex: 1;
   display: flex;

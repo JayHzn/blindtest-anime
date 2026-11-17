@@ -48,6 +48,15 @@ describe('routes catalogue', () => {
     expect(health.catalogueVersion).toBe(catalogue.version);
   });
 
+  it('compte les musiques selon les filtres', async () => {
+    const count = async (query: string) =>
+      (await app.fastify.inject({ url: `/api/themes/count?${query}` })).json<{ count: number }>()
+        .count;
+    expect(await count('popularity=all&types=OP,ED,IN')).toBe(9);
+    expect(await count('popularity=all&types=ED')).toBe(2);
+    expect(await count('popularity=all&types=OP,ED&yearFrom=2010')).toBe(5);
+  });
+
   it('répond 503 sans catalogue', async () => {
     const empty = await buildApp(config, { logger: false });
     const res = await empty.fastify.inject({ url: '/api/titles' });

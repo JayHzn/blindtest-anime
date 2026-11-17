@@ -42,16 +42,26 @@ socket.on('round:prepare', async (audio: RoundAudio) => {
 
 socket.on('round:countdown', ({ round }) => step(`compte à rebours manche ${round + 1}`));
 
-socket.on('round:start', async ({ round, phaseEndsAt, startedAt }) => {
+socket.on('round:start', async ({ round, phaseEndsAt, startedAt, videoUrl }) => {
   step(`écoute manche ${round + 1} (${Math.round((phaseEndsAt - startedAt) / 1000)} s)`);
   const result = await socket.emitWithAck('game:answer', { text: 'zzz réponse fausse' });
   step(`mauvaise réponse → ${JSON.stringify(result)}`);
+  if (videoUrl) {
+    // Préchargement de la vidéo comme le ferait le navigateur (premier Mo).
+    const started = performance.now();
+    const res = await fetch(`${SERVER_URL}${videoUrl}`, { headers: { Range: 'bytes=0-1048575' } });
+    const bytes = (await res.arrayBuffer()).byteLength;
+    step(
+      `vidéo via le proxy : ${res.status}, ${bytes} octets, ${res.headers.get('content-type')}, ` +
+        `${Math.round(performance.now() - started)} ms`,
+    );
+  }
 });
 
 socket.on('round:reveal', (reveal: RoundReveal) => {
   step(
     `révélation : ${reveal.anime.title.fr} — ${reveal.theme.slug} « ${reveal.theme.song} » ` +
-      `(${reveal.theme.artists}) ; vidéo : ${reveal.videoUrl ? 'oui' : 'non'}`,
+      `(${reveal.theme.artists})`,
   );
   socket.emit('game:leave');
   socket.disconnect();

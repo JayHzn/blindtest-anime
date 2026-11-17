@@ -1,5 +1,6 @@
 import { brotliCompressSync, constants as zlib, gzipSync } from 'node:zlib';
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { sanitizeSettings, type ThemeCountResponse } from '@blindtest/shared';
 import type { Catalogue } from '../catalogue/Catalogue';
 
 interface TitlesPayload {
@@ -44,4 +45,25 @@ export function registerCatalogueRoutes(app: FastifyInstance, catalogue: Catalog
     if (!catalogue) return unavailable(reply);
     return catalogue.stats();
   });
+
+  /** Nombre de musiques disponibles avec ces filtres (écran de réglages). */
+  app.get<{ Querystring: Record<string, string | undefined> }>(
+    '/api/themes/count',
+    async (request, reply) => {
+      if (!catalogue) return unavailable(reply);
+      const query = request.query;
+      const toNumber = (value: string | undefined) => (value ? Number(value) : undefined);
+      const popularity = query.popularity === 'all' ? 'all' : toNumber(query.popularity);
+      const settings = sanitizeSettings({
+        filters: {
+          popularity,
+          types: query.types?.split(',') ?? [],
+          yearFrom: toNumber(query.yearFrom),
+          yearTo: toNumber(query.yearTo),
+        },
+      })!;
+      const response: ThemeCountResponse = { count: catalogue.countThemes(settings.filters) };
+      return response;
+    },
+  );
 }

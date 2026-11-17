@@ -44,7 +44,11 @@ Validé le 2026-11-17.
     - le client ne charge que les morceaux couvrant l'extrait (environ 200 Ko au lieu d'environ 1 Mo), puis les recolle avant de jouer ;
     - à vérifier : aucun clic ni blanc audible aux jonctions. En cas d'échec : chanson entière (environ 1 Mo).
   - Si le préchargement échoue, le client prévient le serveur, qui tire une autre chanson avant le début de la manche. Si toutes les sources sont indisponibles : message « Musiques indisponibles, réessaie plus tard ».
-- **Vidéo de révélation** : chargée directement depuis le CDN AnimeThemes, sans miroir (trop volumineux). Si elle ne charge pas : jaquette + titre à la place.
+- **Vidéo de révélation** : affichée seulement à la révélation, mais **préchargée pendant l'écoute** via le proxy, derrière une URL opaque (`/api/video/:token`, envoyée avec `round:start`). Pas de miroir (trop volumineux). Si elle ne charge pas : carte titre à la place, l'extrait continue.
+  - Constaté le 2026-11-17 : le CDN vidéo AnimeThemes (`v.animethemes.moe`) limite très fortement les requêtes (503 HTML au-delà d'environ une toutes les 2-3 s ; Chrome bloque alors la vidéo avec `ERR_BLOCKED_BY_ORB`). Le CDN audio n'a pas cette limite. Le proxy réessaie donc les 503 vidéo (8 essais espacés de 1,5 s), et le navigateur ne fait que quelques requêtes grâce au préchargement.
+  - La vidéo est préchargée à la position que l'extrait aura en fin d'écoute ; à la révélation elle reprend à la position exacte de l'extrait (ou 1,5 s plus loin le temps de charger), pour que la musique continue sans coupure. Mesuré : vidéo jouée entre 0 et 1 s après la révélation, 5 fois sur 5.
+  - Version choisie : sans scènes d'épisode, sans crédits, puis la plus légère (720p : 45 %, 1080p : 35 %, 480p : 9 % du catalogue ; 10 à 40 Mo par vidéo).
+  - **Coût en bande passante** : chaque vidéo transite par le serveur (10 à 40 Mo par manche et par joueur). À reprendre à l'étape 6 (quota Render, éventuel cache partagé entre joueurs d'une même room).
 - Sources de musiques abstraites : « AnimeThemes » (dev), « miroir R2 » (déploiement), « fichiers locaux » prévue pour les OST en v2.
 
 ## Hébergement
@@ -92,7 +96,7 @@ Validé le 2026-11-17.
   - après le compte à rebours, le serveur attend que chaque joueur signale son audio prêt, 10 s au maximum, puis démarre quand même ;
   - quand tous les joueurs connectés ont trouvé, la révélation arrive tout de suite ;
   - 5 musiques de rechange tirées en plus ; un audio qui ne charge pas est remplacé tant que la manche n'a pas commencé ;
-  - la vidéo n'est envoyée qu'à la révélation (son URL contient le nom de l'anime).
+  - la vidéo n'est jamais envoyée en clair (son URL contient le nom de l'anime) : voir « Vidéo de révélation ».
 
 ### Progressif (v1, façon Songspot)
 

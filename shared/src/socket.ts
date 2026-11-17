@@ -28,8 +28,16 @@ export interface ServerToClientEvents {
   'round:prepare': (audio: RoundAudio) => void;
   /** Compte à rebours avant l'écoute. */
   'round:countdown': (payload: { round: number; phaseEndsAt: number }) => void;
-  /** Début de l'écoute : lancer l'extrait à `startedAt` (heure serveur). */
-  'round:start': (payload: { round: number; startedAt: number; phaseEndsAt: number }) => void;
+  /**
+   * Début de l'écoute : lancer l'extrait à `startedAt` (heure serveur).
+   * `videoUrl` (opaque) permet de précharger la vidéo de la révélation.
+   */
+  'round:start': (payload: {
+    round: number;
+    startedAt: number;
+    phaseEndsAt: number;
+    videoUrl: string | null;
+  }) => void;
   /** Un joueur a trouvé (sans révéler la réponse). */
   'player:found': (payload: { playerId: string; players: PlayerScore[] }) => void;
   /** Fin de la manche : réponse et résultats. */

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { PSEUDO_MAX_LENGTH } from '@blindtest/shared';
+import { AppHeader } from '../components/AppHeader';
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { ServerStatusPill } from '../components/ServerStatusPill';
 import { Vinyl } from '../components/Vinyl';
@@ -8,14 +10,18 @@ import { TextField } from '../components/ui/TextField';
 import { useServerStatus } from '../hooks/useServerStatus';
 import { useI18n } from '../i18n/context';
 import { storage, STORAGE_KEYS } from '../lib/storage';
+import { loadTitleIndex } from '../lib/titles';
 import styles from './Home.module.css';
 
-const PSEUDO_MAX_LENGTH = 20;
+interface HomeProps {
+  onPlaySolo: () => void;
+}
 
-export function Home() {
+export function Home({ onPlaySolo }: HomeProps) {
   const { t } = useI18n();
   const { status, retry } = useServerStatus();
   const [pseudo, setPseudo] = useState(() => storage.get(STORAGE_KEYS.pseudo) ?? '');
+  const ready = status === 'ready';
 
   const onPseudoChange = (value: string) => {
     const next = value.slice(0, PSEUDO_MAX_LENGTH);
@@ -25,15 +31,10 @@ export function Home() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <span className={styles.logo}>
-          blindtest <span className={styles.logoAccent}>anime</span> ♪
-        </span>
-        <div className={styles.headerRight}>
-          <ServerStatusPill status={status} onRetry={retry} />
-          <LanguageSwitch />
-        </div>
-      </header>
+      <AppHeader>
+        <ServerStatusPill status={status} onRetry={retry} />
+        <LanguageSwitch />
+      </AppHeader>
 
       <main className={styles.main}>
         <Vinyl size={180} />
@@ -52,7 +53,13 @@ export function Home() {
             onChange={(event) => onPseudoChange(event.target.value)}
           />
           <div className={styles.actions}>
-            <Button size="lg" disabled badge={t('home.soon')}>
+            <Button
+              size="lg"
+              disabled={!ready}
+              onClick={onPlaySolo}
+              // Le serveur est prêt : on commence à charger les titres en avance.
+              onPointerEnter={() => ready && void loadTitleIndex().catch(() => {})}
+            >
               {t('home.playSolo')}
             </Button>
             <Button size="lg" variant="secondary" disabled badge={t('home.soon')}>

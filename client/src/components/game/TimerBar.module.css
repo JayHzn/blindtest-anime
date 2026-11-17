@@ -1,0 +1,16 @@
+.track {
+  width: 100%;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-3);
+  overflow: hidden;
+}
+
+.fill {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--gradient-progress);
+  transform-origin: left center;
+  will-change: transform;
+}

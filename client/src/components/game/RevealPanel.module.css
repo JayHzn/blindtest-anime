@@ -1,0 +1,137 @@
+.panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  animation: rise 0.45s var(--ease-out);
+}
+
+.media {
+  position: relative;
+  /* Assez grand, sans pousser les infos hors de l'écran. */
+  width: min(100%, calc(52vh * 16 / 9));
+  align-self: center;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  background: #000;
+  overflow: hidden;
+  box-shadow: var(--shadow-glow);
+}
+
+.videoHost {
+  position: absolute;
+  inset: 0;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background: linear-gradient(135deg, var(--color-surface-3), var(--color-surface-hover));
+  text-align: center;
+  transition: opacity 0.4s;
+}
+
+.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.placeholderTitle {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 4vw, 40px);
+  font-weight: 700;
+}
+
+.placeholderNote {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.badge {
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+  background: rgb(185 166 255 / 0.18);
+  color: var(--color-lavender);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.title {
+  margin-top: var(--space-2);
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 700;
+}
+
+.romaji {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.song {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.footer {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.result {
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.found {
+  background: rgb(143 240 200 / 0.16);
+  color: var(--color-mint);
+}
+
+.missed {
+  background: var(--color-surface-3);
+  color: var(--color-text-muted);
+}
+
+.next {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}

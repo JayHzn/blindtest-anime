@@ -6,7 +6,7 @@ import {
   type RoundAudio,
   type RoundReveal,
 } from '@blindtest/shared';
-import { AudioRegistry } from '../src/audio/AudioRegistry';
+import { MediaRegistry } from '../src/media/MediaRegistry';
 import { AUDIO_WAIT_MS, Game, type GameEmitter } from '../src/game/Game';
 import { buildFixtureCatalogue } from './fixtures/sources';
 
@@ -23,7 +23,7 @@ interface Emitted {
 }
 
 function setup(themeIds = THEME_IDS) {
-  const audio = new AudioRegistry();
+  const media = new MediaRegistry();
   const events: Emitted[] = [];
   const emitter: GameEmitter = {
     toPlayer: (to, event, ...args) => events.push({ to, event, payload: args[0] }),
@@ -33,7 +33,7 @@ function setup(themeIds = THEME_IDS) {
   const game = new Game({
     settings: { ...DEFAULT_SETTINGS, rounds: 3 },
     catalogue,
-    audio,
+    media,
     emitter,
     themes: themeIds.map((id) => catalogue.getTheme(id)!),
     random: () => 0.5,
@@ -48,7 +48,7 @@ function setup(themeIds = THEME_IDS) {
   /** Le joueur signale que l'audio de la manche est chargé. */
   const ready = (round: number) => game.audioReady('p1', round, prepared(round).url);
 
-  return { game, audio, events, all, last, prepared, ready, onFinished };
+  return { game, media, events, all, last, prepared, ready, onFinished };
 }
 
 describe('Game — mode Classique', () => {
@@ -69,6 +69,10 @@ describe('Game — mode Classique', () => {
     t.ready(0);
     vi.advanceTimersByTime(countdownMs);
     expect(t.all('round:start')).toHaveLength(1);
+    // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque.
+    const { videoUrl } = t.last<{ videoUrl: string }>('round:start');
+    expect(videoUrl).toMatch(/^\/api\/video\/[\w-]+$/);
+    expect(t.media.resolve(videoUrl.split('/').pop()!, 'video')).toContain('S3-OP1');
     // L'audio de la manche suivante est envoyé pendant l'écoute.
     expect(t.prepared(1)).toBeDefined();
 
@@ -88,7 +92,6 @@ describe('Game — mode Classique', () => {
     const reveal = t.last<RoundReveal>('round:reveal');
     expect(reveal.anime.title.fr).toBe("L'Attaque des Titans — Saison 3");
     expect(reveal.theme).toMatchObject({ type: 'OP', sequence: 1 });
-    expect(reveal.videoUrl).toContain('S3-OP1');
     expect(reveal.results[0]).toMatchObject({ playerId: 'p1', correct: true, points: 220 });
     expect(reveal.players[0]?.score).toBe(220);
   });
@@ -157,7 +160,7 @@ describe('Game — mode Classique', () => {
     expect(t.all('round:reveal')).toHaveLength(3);
     expect(t.last('game:end')).toMatchObject({ reason: 'completed' });
     expect(t.game.isClosed).toBe(true);
-    expect(t.audio.size).toBe(0);
+    expect(t.media.size).toBe(0);
     expect(t.onFinished).toHaveBeenCalledOnce();
   });
 
@@ -168,7 +171,7 @@ describe('Game — mode Classique', () => {
     t.game.audioFailed('p1', 0, failedUrl);
     const replacement = t.prepared(0);
     expect(replacement.url).not.toBe(failedUrl);
-    expect(t.audio.resolve(failedUrl.split('/').pop()!)).toBeNull();
+    expect(t.media.resolve(failedUrl.split('/').pop()!)).toBeNull();
 
     // Un signalement périmé (ancienne URL) est ignoré.
     t.game.audioFailed('p1', 0, failedUrl);
@@ -184,7 +187,7 @@ describe('Game — mode Classique', () => {
     t.game.start();
     t.game.removePlayer('p1');
     expect(t.game.isClosed).toBe(true);
-    expect(t.audio.size).toBe(0);
+    expect(t.media.size).toBe(0);
     vi.advanceTimersByTime(60_000);
     expect(t.all('round:start')).toHaveLength(0);
   });

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sanitizePseudo, sanitizeSettings, type StartGameError } from '@blindtest/shared';
-import type { AudioRegistry } from '../audio/AudioRegistry';
+import type { MediaRegistry } from '../media/MediaRegistry';
 import type { Catalogue } from '../catalogue/Catalogue';
 import { Game, type GameEmitter } from './Game';
 
@@ -16,7 +16,7 @@ export class GameManager {
 
   constructor(
     private readonly catalogue: Catalogue | null,
-    private readonly audio: AudioRegistry,
+    private readonly media: MediaRegistry,
     private readonly createEmitter: (gameId: string) => GameEmitter,
   ) {}
 
@@ -35,7 +35,7 @@ export class GameManager {
       id,
       settings,
       catalogue: this.catalogue,
-      audio: this.audio,
+      media: this.media,
       emitter: this.createEmitter(id),
       themes,
       onFinished: (finished) => this.forget(finished),

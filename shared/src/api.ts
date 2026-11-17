@@ -6,3 +6,8 @@ export interface HealthResponse {
   /** Version du catalogue chargé, ou `null` si aucun catalogue n'est disponible. */
   catalogueVersion: string | null;
 }
+
+/** Réponse de `GET /api/themes/count?popularity=&types=OP,ED&yearFrom=&yearTo=`. */
+export interface ThemeCountResponse {
+  count: number;
+}
