@@ -10,3 +10,6 @@ coverage/
 # Catalogue SQLite généré par le script de synchro
 server/data/*.db
 server/data/*.db-*
+server/data/*.tmp
+# Réponses brutes des API (réutilisables avec --cached)
+server/data/cache/

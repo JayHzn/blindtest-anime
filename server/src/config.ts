@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 const toInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(value ?? '', 10);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -11,6 +13,9 @@ export const config = {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  /** Base SQLite générée par `npm run catalogue:sync`. */
+  cataloguePath:
+    process.env.CATALOGUE_PATH ?? fileURLToPath(new URL('../data/catalogue.db', import.meta.url)),
   version: process.env.npm_package_version ?? '0.1.0',
   isProduction: process.env.NODE_ENV === 'production',
 } as const;

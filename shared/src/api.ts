@@ -3,4 +3,6 @@ export interface HealthResponse {
   status: 'ok';
   version: string;
   uptimeSeconds: number;
+  /** Version du catalogue chargé, ou `null` si aucun catalogue n'est disponible. */
+  catalogueVersion: string | null;
 }
