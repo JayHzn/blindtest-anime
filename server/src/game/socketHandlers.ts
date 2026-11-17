@@ -53,6 +53,11 @@ export function registerGameHandlers(socket: GameSocket, manager: GameManager): 
     );
   });
 
+  socket.on('game:nextTier', (ack) => {
+    if (typeof ack !== 'function') return;
+    ack(manager.gameOf(socket.id)?.nextTier(socket.id) ?? null);
+  });
+
   socket.on('audio:ready', (payload) => {
     const report = sanitizeAudioReport(payload);
     if (report) manager.gameOf(socket.id)?.audioReady(socket.id, report.round, report.url);

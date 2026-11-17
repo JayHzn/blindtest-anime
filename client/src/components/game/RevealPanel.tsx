@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { RoundReveal } from '@blindtest/shared';
+import { normalize, PROGRESSIVE, type RoundReveal } from '@blindtest/shared';
 import type { GameSession } from '../../game/GameSession';
 import { secondsLeft, useServerNow } from '../../hooks/useServerNow';
 import { useI18n } from '../../i18n/context';
@@ -89,9 +89,6 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
           ) : (
             <span className={styles.placeholderTitle}>{title}</span>
           )}
-          {!hasVideo || failed ? (
-            <span className={styles.placeholderNote}>{t('game.reveal.noVideo')}</span>
-          ) : null}
         </div>
       </div>
 
@@ -100,7 +97,7 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
           {t(`theme.${reveal.theme.type}`)} {reveal.theme.sequence}
         </span>
         <h2 className={styles.title}>{title}</h2>
-        {reveal.anime.romaji !== title ? (
+        {normalize(reveal.anime.romaji) !== normalize(title) ? (
           <p className={styles.romaji}>{reveal.anime.romaji}</p>
         ) : null}
         {reveal.theme.song ? (
@@ -113,11 +110,17 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
           {mine?.correct ? (
             <span className={[styles.result, styles.found].join(' ')}>
               +{mine.points} ·{' '}
-              {t('game.reveal.found', {
-                s: ((mine.elapsedMs ?? 0) / 1000).toLocaleString(lang, {
-                  maximumFractionDigits: 1,
-                }),
-              })}
+              {mine.tier !== null
+                ? t('game.reveal.foundTier', {
+                    s: t('game.seconds', {
+                      s: ((PROGRESSIVE.tiersMs[mine.tier] ?? 0) / 1000).toLocaleString(lang),
+                    }),
+                  })
+                : t('game.reveal.found', {
+                    s: ((mine.elapsedMs ?? 0) / 1000).toLocaleString(lang, {
+                      maximumFractionDigits: 1,
+                    }),
+                  })}
             </span>
           ) : (
             <span className={[styles.result, styles.missed].join(' ')}>

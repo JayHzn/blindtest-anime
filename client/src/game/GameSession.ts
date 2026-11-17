@@ -1,5 +1,7 @@
 import {
+  INITIAL_PROGRESS,
   MODE_TIMINGS,
+  PROGRESSIVE,
   type AnswerPayload,
   type GameEnd,
   type GamePhase,
@@ -9,6 +11,7 @@ import {
   type RoundReveal,
   type ServerToClientEvents,
   type StartGameError,
+  type TierProgress,
 } from '@blindtest/shared';
 import { AudioPlayer } from '../lib/audioPlayer';
 import { VideoPreloader } from '../lib/videoPreloader';
@@ -20,6 +23,8 @@ import { ensureConnected, socket } from '../lib/socket';
 export type AnswerFeedback =
   | { status: 'idle' | 'pending'; wrongCount: number }
   | { status: 'wrong'; wrongCount: number }
+  /** Mode Progressif : trois erreurs au dernier palier. */
+  | { status: 'eliminated'; wrongCount: number }
   | {
       status: 'correct';
       wrongCount: number;
@@ -42,6 +47,10 @@ export interface SessionState {
   /** Révélations des manches terminées, dans l'ordre. */
   history: RoundReveal[];
   answer: AnswerFeedback;
+  /** Mode Progressif : palier et essais restants du joueur pour la manche. */
+  progress: TierProgress;
+  /** Un extrait est en cours de lecture (mode Progressif). */
+  snippetPlaying: boolean;
   end: GameEnd | null;
   /** Ancien record pour ces réglages (renseigné en fin de partie). */
   previousBest: number | null;
@@ -61,6 +70,7 @@ export class GameSession {
   private readonly listeners = new Set<() => void>();
   private readonly handlers: Handlers;
   private tickTimers: number[] = [];
+  private snippetCount = 0;
   private disposed = false;
 
   constructor(
@@ -80,6 +90,8 @@ export class GameSession {
       reveal: null,
       history: [],
       answer: { status: 'idle', wrongCount: 0 },
+      progress: INITIAL_PROGRESS,
+      snippetPlaying: false,
       end: null,
       previousBest: null,
     };
@@ -141,7 +153,7 @@ export class GameSession {
   }
 
   async submitAnswer(payload: AnswerPayload): Promise<void> {
-    if (this.state.phase !== 'listening' || this.state.answer.status === 'correct') return;
+    if (this.state.phase !== 'listening' || !this.canAnswer()) return;
     const round = this.state.round;
     const wrongCount = this.state.answer.wrongCount;
     this.update({ answer: { status: 'pending', wrongCount } });
@@ -151,6 +163,9 @@ export class GameSession {
       .emitWithAck('game:answer', payload)
       .catch(() => null);
     if (this.disposed || this.state.round !== round) return;
+
+    const previousTier = this.state.progress.tier;
+    if (result?.accepted && result.progress) this.update({ progress: result.progress });
 
     if (result?.accepted && result.correct) {
       sfx.correct();
@@ -165,10 +180,38 @@ export class GameSession {
       });
     } else if (result?.accepted) {
       sfx.wrong();
-      this.update({ answer: { status: 'wrong', wrongCount: wrongCount + 1 } });
+      const eliminated = result.progress?.eliminated ?? false;
+      this.update({
+        answer: { status: eliminated ? 'eliminated' : 'wrong', wrongCount: wrongCount + 1 },
+      });
+      // Trois erreurs : palier suivant joué automatiquement.
+      if (result.progress && result.progress.tier > previousTier) void this.playTier();
+    } else if (result?.reason === 'eliminated') {
+      this.update({ answer: { status: 'eliminated', wrongCount } });
     } else {
       this.update({ answer: { status: 'idle', wrongCount } });
     }
+  }
+
+  /** Mode Progressif : réécouter l'extrait du palier en cours. */
+  replay(): void {
+    if (this.isProgressive && this.state.phase === 'listening' && this.canAnswer()) {
+      void this.playTier();
+    }
+  }
+
+  /** Mode Progressif : passer au palier suivant (extrait plus long, moins de points). */
+  async nextTier(): Promise<void> {
+    if (!this.isProgressive || this.state.phase !== 'listening' || !this.canAnswer()) return;
+    const round = this.state.round;
+    const before = this.state.progress.tier;
+    const progress = await socket
+      .timeout(5000)
+      .emitWithAck('game:nextTier')
+      .catch(() => null);
+    if (this.disposed || this.state.round !== round || !progress) return;
+    this.update({ progress });
+    if (progress.tier > before) void this.playTier();
   }
 
   setVolume(volume: number): void {
@@ -204,6 +247,8 @@ export class GameSession {
       phaseEndsAt,
       reveal: null,
       answer: { status: 'idle', wrongCount: 0 },
+      progress: INITIAL_PROGRESS,
+      snippetPlaying: false,
     });
     // Cloche « attention », puis un tic à chaque seconde restante.
     sfx.bell();
@@ -222,12 +267,18 @@ export class GameSession {
     videoUrl: string | null,
   ): void {
     this.clearTicks();
-    this.audio.play(round, startedAt);
-    // La vidéo se précharge à l'endroit où l'extrait sera à la fin de l'écoute.
-    const listenS = MODE_TIMINGS[this.state.settings.mode].listenMs / 1000;
-    const startTime = this.audio.startTime(round);
-    this.video.preload(round, videoUrl, startTime === null ? 0 : startTime + listenS - 1);
     this.update({ phase: 'listening', round, phaseEndsAt });
+    const startTime = this.audio.startTime(round) ?? 0;
+    if (this.isProgressive) {
+      // Premier palier joué automatiquement ; la vidéo se précharge au début de l'extrait.
+      void this.playTier();
+      this.video.preload(round, videoUrl, startTime);
+    } else {
+      this.audio.play(round, startedAt);
+      // La vidéo se précharge à l'endroit où l'extrait sera à la fin de l'écoute.
+      const listenS = MODE_TIMINGS.classic.listenMs / 1000;
+      this.video.preload(round, videoUrl, startTime + listenS - 1);
+    }
   }
 
   private onReveal(reveal: RoundReveal): void {
@@ -266,6 +317,28 @@ export class GameSession {
   }
 
   // ─── Utilitaires ──────────────────────────────────────────────────────────
+
+  private get isProgressive(): boolean {
+    return this.state.settings.mode === 'progressive';
+  }
+
+  /** Le joueur peut encore répondre (pas trouvé, pas éliminé). */
+  private canAnswer(): boolean {
+    return this.state.answer.status !== 'correct' && this.state.answer.status !== 'eliminated';
+  }
+
+  /** Joue l'extrait du palier en cours. */
+  private async playTier(): Promise<void> {
+    const round = this.state.round;
+    const duration = PROGRESSIVE.tiersMs[this.state.progress.tier] ?? 0;
+    const snippet = ++this.snippetCount;
+    this.update({ snippetPlaying: true });
+    await this.audio.playSnippet(round, duration);
+    // Un extrait relancé entre-temps reste « en cours ».
+    if (!this.disposed && snippet === this.snippetCount && this.state.round === round) {
+      this.update({ snippetPlaying: false });
+    }
+  }
 
   private update(patch: Partial<SessionState>): void {
     this.state = { ...this.state, ...patch };

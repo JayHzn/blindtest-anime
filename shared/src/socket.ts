@@ -13,6 +13,7 @@ import type {
   RoundAudio,
   RoundReveal,
   StartGameError,
+  TierProgress,
 } from './game';
 
 export type StartGameResponse =
@@ -57,6 +58,8 @@ export interface ClientToServerEvents {
   ) => void;
   /** Envoie une réponse pendant l'écoute. */
   'game:answer': (answer: AnswerPayload, ack: (result: AnswerResult) => void) => void;
+  /** Mode Progressif : passer au palier suivant (extrait plus long, moins de points). */
+  'game:nextTier': (ack: (progress: TierProgress | null) => void) => void;
   /** Quitte la partie en cours. */
   'game:leave': () => void;
   /** L'audio de la manche (`url` reçue dans `round:prepare`) est préchargé et prêt à jouer. */

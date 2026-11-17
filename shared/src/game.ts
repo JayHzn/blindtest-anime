@@ -1,7 +1,12 @@
 import { THEME_TYPES, type PopularityTier, type ThemeFilters, type ThemeType } from './catalogue';
 
-/** Modes de jeu. Seul « classic » existe pour l'instant (Progressif : étape 4). */
-export type GameModeId = 'classic';
+/**
+ * Modes de jeu :
+ * - `classic` : 15 s d'écoute continue, points selon la rapidité ;
+ * - `progressive` : extraits de plus en plus longs (façon Songspot), points selon le palier.
+ */
+export type GameModeId = 'classic' | 'progressive';
+export const GAME_MODES: readonly GameModeId[] = ['classic', 'progressive'];
 
 export interface ModeTiming {
   /** Compte à rebours avant l'écoute (son de cloche). */
@@ -14,6 +19,32 @@ export interface ModeTiming {
 
 export const MODE_TIMINGS: Record<GameModeId, ModeTiming> = {
   classic: { countdownMs: 3000, listenMs: 15_000, revealMs: 10_000 },
+  progressive: { countdownMs: 3000, listenMs: 60_000, revealMs: 10_000 },
+};
+
+/** Mode Progressif : durée des extraits, points et essais par palier. */
+export const PROGRESSIVE = {
+  tiersMs: [500, 1000, 5000, 15_000],
+  tierPoints: [200, 150, 100, 50],
+  attemptsPerTier: 3,
+} as const;
+
+export const PROGRESSIVE_LAST_TIER = PROGRESSIVE.tiersMs.length - 1;
+
+/** Où en est un joueur dans la manche en mode Progressif. */
+export interface TierProgress {
+  /** Palier en cours (0 = 0,5 s). */
+  tier: number;
+  /** Essais restants sur ce palier. */
+  attemptsLeft: number;
+  /** Trois erreurs au dernier palier : plus de réponse possible pour cette manche. */
+  eliminated: boolean;
+}
+
+export const INITIAL_PROGRESS: TierProgress = {
+  tier: 0,
+  attemptsLeft: PROGRESSIVE.attemptsPerTier,
+  eliminated: false,
 };
 
 /** Barème du mode Classique : de 200 points (instantané) à 50 (dernière seconde). */
@@ -87,7 +118,10 @@ export function sanitizeSettings(input: unknown): GameSettings | null {
   if (yearFrom !== undefined) filters.yearFrom = yearFrom;
   if (yearTo !== undefined) filters.yearTo = yearTo;
 
-  return { mode: 'classic', rounds, filters };
+  const mode = GAME_MODES.includes(raw.mode as GameModeId)
+    ? (raw.mode as GameModeId)
+    : DEFAULT_SETTINGS.mode;
+  return { mode, rounds, filters };
 }
 
 /** Pseudo nettoyé (espaces, longueur), « Joueur » par défaut. */
@@ -138,6 +172,8 @@ export interface PlayerRoundResult {
   elapsedMs: number | null;
   seasonExact: boolean;
   sequenceExact: boolean;
+  /** Mode Progressif : palier auquel la réponse a été trouvée. */
+  tier: number | null;
 }
 
 export interface LocalizedTitle {
@@ -170,13 +206,18 @@ export interface RoundReveal {
 }
 
 export type AnswerResult =
-  | { accepted: false; reason: 'not_listening' | 'already_found' | 'not_in_game' }
+  | {
+      accepted: false;
+      reason: 'not_listening' | 'already_found' | 'not_in_game' | 'eliminated';
+    }
   | {
       accepted: true;
       correct: boolean;
       points: number;
       seasonExact: boolean;
       sequenceExact: boolean;
+      /** Mode Progressif : progression après cette réponse (palier, essais restants…). */
+      progress?: TierProgress;
     };
 
 export type GameEndReason = 'completed' | 'audio_unavailable';

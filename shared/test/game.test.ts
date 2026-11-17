@@ -32,6 +32,8 @@ describe('sanitizeSettings', () => {
       filters: { popularity: 500, types: ['OP', 'ED'], yearFrom: 1990, yearTo: 2020 },
     });
     expect(sanitizeSettings({})).toEqual(DEFAULT_SETTINGS);
+    expect(sanitizeSettings({ mode: 'progressive' })?.mode).toBe('progressive');
+    expect(sanitizeSettings({ mode: 'inconnu' })?.mode).toBe('classic');
     expect(sanitizeSettings(null)).toBeNull();
   });
 });

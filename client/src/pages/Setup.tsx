@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   DEFAULT_SETTINGS,
+  GAME_MODES,
   POPULARITY_TIERS,
   sanitizeSettings,
   type GameSettings,
@@ -110,18 +111,22 @@ export function Setup({ error, starting, onBack, onStart }: SetupProps) {
         <Card className={styles.card}>
           <section className={styles.section}>
             <h2 className={styles.label}>{t('setup.mode')}</h2>
-            <div className={styles.modes}>
-              <button type="button" className={[styles.mode, styles.modeActive].join(' ')}>
-                <span className={styles.modeName}>{t('setup.mode.classic')}</span>
-                <span className={styles.modeDesc}>{t('setup.mode.classic.desc')}</span>
-              </button>
-              <button type="button" className={styles.mode} disabled>
-                <span className={styles.modeName}>
-                  {t('setup.mode.progressive')}{' '}
-                  <span className={styles.soon}>{t('home.soon')}</span>
-                </span>
-                <span className={styles.modeDesc}>{t('setup.mode.progressive.desc')}</span>
-              </button>
+            <div className={styles.modes} role="radiogroup" aria-label={t('setup.mode')}>
+              {GAME_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={settings.mode === mode}
+                  className={[styles.mode, settings.mode === mode ? styles.modeActive : ''].join(
+                    ' ',
+                  )}
+                  onClick={() => update({ ...settings, mode })}
+                >
+                  <span className={styles.modeName}>{t(`setup.mode.${mode}`)}</span>
+                  <span className={styles.modeDesc}>{t(`setup.mode.${mode}.desc`)}</span>
+                </button>
+              ))}
             </div>
           </section>
 

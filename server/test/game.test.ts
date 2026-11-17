@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   MODE_TIMINGS,
   classicPoints,
+  type GameModeId,
   type RoundAudio,
   type RoundReveal,
 } from '@blindtest/shared';
@@ -22,7 +23,7 @@ interface Emitted {
   payload: unknown;
 }
 
-function setup(themeIds = THEME_IDS) {
+function setup(themeIds = THEME_IDS, mode: GameModeId = 'classic') {
   const media = new MediaRegistry();
   const events: Emitted[] = [];
   const emitter: GameEmitter = {
@@ -31,7 +32,7 @@ function setup(themeIds = THEME_IDS) {
   };
   const onFinished = vi.fn();
   const game = new Game({
-    settings: { ...DEFAULT_SETTINGS, rounds: 3 },
+    settings: { ...DEFAULT_SETTINGS, mode, rounds: 3 },
     catalogue,
     media,
     emitter,
@@ -194,5 +195,88 @@ describe('Game — mode Classique', () => {
     expect(t.media.size).toBe(0);
     vi.advanceTimersByTime(60_000);
     expect(t.all('round:start')).toHaveLength(0);
+  });
+});
+
+describe('Game — mode Progressif', () => {
+  const progressive = MODE_TIMINGS.progressive;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Partie Progressif démarrée, première manche (S3 OP1) en écoute. */
+  function listening() {
+    const t = setup(THEME_IDS, 'progressive');
+    t.game.start();
+    t.ready(0);
+    vi.advanceTimersByTime(progressive.countdownMs);
+    expect(t.game.currentPhase).toBe('listening');
+    return t;
+  }
+
+  it('donne les points du palier atteint, plus les bonus', () => {
+    const t = listening();
+    expect(t.game.nextTier('p1')).toEqual({ tier: 1, attemptsLeft: 3, eliminated: false });
+    // Le temps ne compte pas : seul le palier fixe le barème.
+    vi.advanceTimersByTime(20_000);
+    expect(t.game.answer('p1', { text: 'Attack on Titan Season 3' })).toMatchObject({
+      correct: true,
+      points: 150 + 25,
+      progress: { tier: 1 },
+    });
+    vi.advanceTimersByTime(0);
+    expect(t.last<RoundReveal>('round:reveal').results[0]).toMatchObject({ tier: 1, points: 175 });
+  });
+
+  it('passe au palier suivant après 3 erreurs', () => {
+    const t = listening();
+    expect(t.game.answer('p1', { text: 'One Piece' })).toMatchObject({
+      correct: false,
+      progress: { tier: 0, attemptsLeft: 2 },
+    });
+    t.game.answer('p1', { text: 'One Piece' });
+    expect(t.game.answer('p1', { text: 'One Piece' })).toMatchObject({
+      progress: { tier: 1, attemptsLeft: 3, eliminated: false },
+    });
+  });
+
+  it('élimine après 3 erreurs au dernier palier et termine la manche', () => {
+    const t = listening();
+    for (let i = 0; i < 3; i++) t.game.nextTier('p1');
+    expect(t.game.nextTier('p1')).toMatchObject({ tier: 3 }); // pas au-delà du dernier palier
+    for (let i = 0; i < 2; i++) t.game.answer('p1', { text: 'One Piece' });
+    expect(t.game.answer('p1', { text: 'One Piece' })).toMatchObject({
+      progress: { tier: 3, attemptsLeft: 0, eliminated: true },
+    });
+    expect(t.game.answer('p1', { text: 'snk' })).toEqual({
+      accepted: false,
+      reason: 'eliminated',
+    });
+    // Solo : plus personne ne peut répondre, révélation immédiate.
+    vi.advanceTimersByTime(0);
+    expect(t.last<RoundReveal>('round:reveal').results[0]).toMatchObject({
+      correct: false,
+      points: 0,
+    });
+  });
+
+  it('laisse 60 s pour répondre', () => {
+    const t = listening();
+    vi.advanceTimersByTime(progressive.listenMs - 1);
+    expect(t.all('round:reveal')).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect(t.all('round:reveal')).toHaveLength(1);
+  });
+
+  it('refuse le palier suivant hors du mode Progressif', () => {
+    const t = setup();
+    t.game.start();
+    t.ready(0);
+    vi.advanceTimersByTime(countdownMs);
+    expect(t.game.nextTier('p1')).toBeNull();
   });
 });

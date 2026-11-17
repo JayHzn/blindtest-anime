@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import {
   BONUS_POINTS,
   MODE_TIMINGS,
+  INITIAL_PROGRESS,
+  PROGRESSIVE,
+  PROGRESSIVE_LAST_TIER,
   classicPoints,
   type AnswerPayload,
   type AnswerResult,
@@ -15,6 +18,7 @@ import {
   type RoundAudio,
   type RoundReveal,
   type ServerToClientEvents,
+  type TierProgress,
 } from '@blindtest/shared';
 import { audioPath, videoPath, type MediaRegistry } from '../media/MediaRegistry';
 import type { Catalogue } from '../catalogue/Catalogue';
@@ -55,6 +59,8 @@ interface RoundState {
   startRatio: number;
   listenStartedAt: number | null;
   results: Map<string, PlayerRoundResult>;
+  /** Mode Progressif : palier et essais de chaque joueur. */
+  progress: Map<string, TierProgress>;
 }
 
 export interface GameOptions {
@@ -136,7 +142,7 @@ export class Game {
       this.close();
       return;
     }
-    if (this.phase === 'listening' && this.everyoneFound()) this.schedule(0, () => this.endRound());
+    if (this.phase === 'listening' && this.everyoneDone()) this.schedule(0, () => this.endRound());
     if (this.waitingForAudio && this.everyoneReady()) this.startListening();
   }
 
@@ -198,21 +204,31 @@ export class Game {
       return { accepted: false, reason: 'not_listening' };
     }
     if (round.results.get(playerId)?.correct) return { accepted: false, reason: 'already_found' };
+    const progress = this.isProgressive ? this.progressOf(round, playerId) : null;
+    if (progress?.eliminated) return { accepted: false, reason: 'eliminated' };
 
     const elapsedMs = Math.max(0, Date.now() - round.listenStartedAt);
     const verdict = this.catalogue.validate(round.theme.id, payload);
+
     if (!verdict.correct) {
+      if (progress) this.registerMistake(progress);
+      // Éliminé au dernier palier : la manche peut se terminer si tout le monde a fini.
+      if (progress?.eliminated && this.everyoneDone()) this.schedule(0, () => this.endRound());
       return {
         accepted: true,
         correct: false,
         points: 0,
         seasonExact: false,
         sequenceExact: false,
+        ...(progress && { progress: { ...progress } }),
       };
     }
 
+    const basePoints = progress
+      ? PROGRESSIVE.tierPoints[progress.tier]!
+      : classicPoints(elapsedMs, this.timing.listenMs);
     const points =
-      classicPoints(elapsedMs, this.timing.listenMs) +
+      basePoints +
       (verdict.seasonExact ? BONUS_POINTS : 0) +
       (verdict.sequenceExact ? BONUS_POINTS : 0);
     player.score += points;
@@ -223,11 +239,12 @@ export class Game {
       elapsedMs,
       seasonExact: verdict.seasonExact,
       sequenceExact: verdict.sequenceExact,
+      tier: progress?.tier ?? null,
     });
 
     this.emitter.toAll('player:found', { playerId, players: this.scoreboard() });
-    // Tout le monde a trouvé : révélation tout de suite (après l'accusé de réception).
-    if (this.everyoneFound()) this.schedule(0, () => this.endRound());
+    // Tout le monde a fini : révélation tout de suite (après l'accusé de réception).
+    if (this.everyoneDone()) this.schedule(0, () => this.endRound());
 
     return {
       accepted: true,
@@ -235,7 +252,46 @@ export class Game {
       points,
       seasonExact: verdict.seasonExact,
       sequenceExact: verdict.sequenceExact,
+      ...(progress && { progress: { ...progress } }),
     };
+  }
+
+  /** Mode Progressif : le joueur demande l'extrait suivant (plus long, moins de points). */
+  nextTier(playerId: string): TierProgress | null {
+    const round = this.rounds[this.roundIndex];
+    if (!this.isProgressive || this.phase !== 'listening' || !round) return null;
+    if (!this.players.get(playerId)?.connected || round.results.get(playerId)?.correct) return null;
+    const progress = this.progressOf(round, playerId);
+    if (!progress.eliminated && progress.tier < PROGRESSIVE_LAST_TIER) {
+      progress.tier++;
+      progress.attemptsLeft = PROGRESSIVE.attemptsPerTier;
+    }
+    return { ...progress };
+  }
+
+  private get isProgressive(): boolean {
+    return this.settings.mode === 'progressive';
+  }
+
+  private progressOf(round: RoundState, playerId: string): TierProgress {
+    let progress = round.progress.get(playerId);
+    if (!progress) {
+      progress = { ...INITIAL_PROGRESS };
+      round.progress.set(playerId, progress);
+    }
+    return progress;
+  }
+
+  /** Trois erreurs sur un palier : palier suivant, ou élimination au dernier. */
+  private registerMistake(progress: TierProgress): void {
+    progress.attemptsLeft--;
+    if (progress.attemptsLeft > 0) return;
+    if (progress.tier < PROGRESSIVE_LAST_TIER) {
+      progress.tier++;
+      progress.attemptsLeft = PROGRESSIVE.attemptsPerTier;
+    } else {
+      progress.eliminated = true;
+    }
   }
 
   /** Arrête la partie sans prévenir les joueurs (plus personne, ou serveur qui s'arrête). */
@@ -326,6 +382,7 @@ export class Game {
       videoToken: null,
       listenStartedAt: null,
       results: new Map(),
+      progress: new Map(),
     };
   }
 
@@ -359,6 +416,7 @@ export class Game {
           elapsedMs: null,
           seasonExact: false,
           sequenceExact: false,
+          tier: null,
         },
     );
     return {
@@ -416,9 +474,13 @@ export class Game {
     return this.connectedPlayers().every((player) => player.ready.get(this.roundIndex) === url);
   }
 
-  private everyoneFound(): boolean {
+  /** Tous les joueurs connectés ont trouvé (ou sont éliminés, en Progressif). */
+  private everyoneDone(): boolean {
     const round = this.rounds[this.roundIndex]!;
-    return this.connectedPlayers().every((player) => round.results.get(player.id)?.correct);
+    return this.connectedPlayers().every(
+      (player) =>
+        round.results.get(player.id)?.correct || round.progress.get(player.id)?.eliminated,
+    );
   }
 
   private schedule(delayMs: number, action: () => void): void {

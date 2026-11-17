@@ -105,6 +105,11 @@ Validé le 2026-11-17.
 - 3 essais par palier ; après 3 erreurs, passage automatique au palier suivant. Au dernier palier, 3 erreurs = éliminé de la manche.
 - Score selon le palier : 200 / 150 / 100 / 50 (+ bonus de précision).
 - 0 pt si rien trouvé au bout de 60 s. Fin de manche quand tout le monde a trouvé/est éliminé ou à 60 s.
+- Détails (étape 4) :
+  - le premier palier est joué automatiquement au début de l'écoute ; le palier suivant (bouton, ou 3 erreurs) est joué automatiquement aussi ;
+  - même point de départ tiré au hasard qu'en Classique (0 à 60 % du morceau) : chaque palier rejoue l'extrait depuis ce point, en plus long ;
+  - le serveur compte le palier atteint (le barème en dépend) ; le navigateur coupe l'extrait à la bonne durée. Un joueur qui bidouille son navigateur pourrait écouter plus longtemps : acceptable entre potes ;
+  - à la révélation, la vidéo reprend là où le dernier extrait s'est arrêté.
 
 ### Feuille de route
 

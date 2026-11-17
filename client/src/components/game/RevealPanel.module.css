@@ -45,7 +45,7 @@
     linear-gradient(135deg, var(--color-surface-3), var(--color-surface-hover))
   );
   text-align: center;
-  transition: opacity 0.4s;
+  transition: opacity 0.8s ease;
 }
 
 .hidden {
@@ -78,17 +78,6 @@
   border-radius: var(--radius-sm);
   box-shadow: 0 20px 50px rgb(0 0 0 / 0.55);
   animation: coverIn 0.5s var(--ease-out);
-}
-
-.placeholderNote {
-  position: absolute;
-  bottom: var(--space-3);
-  padding: 4px 14px;
-  border-radius: var(--radius-pill);
-  background: rgb(27 20 36 / 0.75);
-  color: var(--color-text-muted);
-  font-size: 13px;
-  font-weight: 700;
 }
 
 @keyframes coverIn {

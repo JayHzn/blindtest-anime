@@ -18,6 +18,8 @@ const PRELOAD_TIMEOUT_MS = 15_000;
 export class AudioPlayer {
   private readonly tracks = new Map<number, Track>();
   private volume = 0.8;
+  /** Incrémenté à chaque extrait : un nouvel extrait interrompt le précédent. */
+  private snippetToken = 0;
 
   setVolume(volume: number): void {
     this.volume = volume;
@@ -74,9 +76,7 @@ export class AudioPlayer {
 
   /** Lance l'extrait au bon endroit, en rattrapant le retard depuis `startedAt` (heure serveur). */
   play(round: number, startedAt: number): void {
-    for (const previous of [...this.tracks.keys()]) {
-      if (previous < round) this.release(previous);
-    }
+    this.releaseBefore(round);
     const track = this.tracks.get(round);
     if (!track) return;
     const lateBy = Math.max(0, serverNow() - startedAt) / 1000;
@@ -84,6 +84,36 @@ export class AudioPlayer {
     track.element.volume = this.volume;
     void track.element.play().catch(() => {
       // lecture refusée (onglet en arrière-plan…) : la manche continue sans son
+    });
+  }
+
+  /**
+   * Mode Progressif : joue `durationMs` depuis le point de départ, puis s'arrête.
+   * Résout quand l'extrait est fini (ou interrompu par un autre).
+   */
+  playSnippet(round: number, durationMs: number): Promise<void> {
+    this.releaseBefore(round);
+    const track = this.tracks.get(round);
+    this.snippetToken++;
+    const token = this.snippetToken;
+    if (!track) return Promise.resolve();
+    const { element } = track;
+    const endAt = track.startTime + durationMs / 1000;
+    element.currentTime = track.startTime;
+    element.volume = this.volume;
+    void element.play().catch(() => {});
+
+    return new Promise((resolve) => {
+      // Vérifié à chaque image : arrêt à la bonne position, à ~16 ms près.
+      const watch = () => {
+        if (token !== this.snippetToken) return resolve();
+        if (element.currentTime >= endAt || element.ended) {
+          element.pause();
+          return resolve();
+        }
+        requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
     });
   }
 
@@ -114,6 +144,12 @@ export class AudioPlayer {
 
   stopAll(): void {
     for (const round of [...this.tracks.keys()]) this.release(round);
+  }
+
+  private releaseBefore(round: number): void {
+    for (const previous of [...this.tracks.keys()]) {
+      if (previous < round) this.release(previous);
+    }
   }
 
   private release(round: number): void {
