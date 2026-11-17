@@ -288,5 +288,21 @@ describe('Game — mode Progressif', () => {
     t.ready(0);
     vi.advanceTimersByTime(countdownMs);
     expect(t.game.nextTier('p1')).toBeNull();
+    expect(t.game.giveUp('p1')).toBeNull();
+  });
+
+  it("permet d'abandonner au dernier palier seulement", () => {
+    const t = listening();
+    // Avant le dernier palier : rien ne change.
+    expect(t.game.giveUp('p1')).toMatchObject({ tier: 0, eliminated: false });
+    for (let i = 0; i < 3; i++) t.game.nextTier('p1');
+    expect(t.game.giveUp('p1')).toMatchObject({ tier: 3, eliminated: true });
+    expect(t.game.answer('p1', { text: 'snk' })).toEqual({ accepted: false, reason: 'eliminated' });
+    // Solo : tout le monde a fini, révélation immédiate avec 0 point.
+    vi.advanceTimersByTime(0);
+    expect(t.last<RoundReveal>('round:reveal').results[0]).toMatchObject({
+      correct: false,
+      points: 0,
+    });
   });
 });

@@ -366,6 +366,22 @@ export class Game {
     return { ...progress };
   }
 
+  /**
+   * Mode Progressif : le joueur abandonne la manche au dernier palier (0 point).
+   * Il compte comme ayant fini : la révélation arrive dès que tout le monde a fini.
+   */
+  giveUp(playerId: string): TierProgress | null {
+    const round = this.rounds[this.roundIndex];
+    if (!this.isProgressive || this.phase !== 'listening' || !round) return null;
+    if (!this.players.get(playerId)?.connected || round.results.get(playerId)?.correct) return null;
+    const progress = this.progressOf(round, playerId);
+    if (progress.tier < PROGRESSIVE_LAST_TIER) return { ...progress };
+    progress.eliminated = true;
+    progress.attemptsLeft = 0;
+    if (this.everyoneDone()) this.schedule(0, () => this.endRound());
+    return { ...progress };
+  }
+
   private get isProgressive(): boolean {
     return this.settings.mode === 'progressive';
   }

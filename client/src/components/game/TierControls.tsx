@@ -8,10 +8,19 @@ interface TierControlsProps {
   disabled: boolean;
   onReplay: () => void;
   onNext: () => void;
+  /** Dernier palier : le joueur ne sait pas et passe la manche. */
+  onGiveUp: () => void;
 }
 
-/** Mode Progressif : paliers (durée + points), réécoute, palier suivant, essais restants. */
-export function TierControls({ progress, playing, disabled, onReplay, onNext }: TierControlsProps) {
+/** Mode Progressif : paliers (durée + points), réécoute, palier suivant (ou abandon), essais restants. */
+export function TierControls({
+  progress,
+  playing,
+  disabled,
+  onReplay,
+  onNext,
+  onGiveUp,
+}: TierControlsProps) {
   const { t, lang } = useI18n();
   const seconds = (ms: number) => t('game.seconds', { s: (ms / 1000).toLocaleString(lang) });
   const currentMs = PROGRESSIVE.tiersMs[progress.tier] ?? 0;
@@ -68,14 +77,19 @@ export function TierControls({ progress, playing, disabled, onReplay, onNext }: 
           </span>
         </div>
 
-        <button
-          type="button"
-          className={styles.action}
-          onClick={onNext}
-          disabled={disabled || isLast}
-        >
-          {isLast ? t('progressive.lastTier') : t('progressive.next')}
-          {isLast ? null : (
+        {isLast ? (
+          // Plus d'extrait à débloquer : le joueur qui ne sait pas passe la manche.
+          <button
+            type="button"
+            className={[styles.action, styles.giveUp].join(' ')}
+            onClick={onGiveUp}
+            disabled={disabled}
+          >
+            {t('progressive.giveUp')}
+          </button>
+        ) : (
+          <button type="button" className={styles.action} onClick={onNext} disabled={disabled}>
+            {t('progressive.next')}
             <svg
               width="16"
               height="16"
@@ -89,8 +103,8 @@ export function TierControls({ progress, playing, disabled, onReplay, onNext }: 
             >
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>
-          )}
-        </button>
+          </button>
+        )}
       </div>
     </div>
   );

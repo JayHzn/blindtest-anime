@@ -116,7 +116,8 @@ Validé le 2026-11-17.
   - le premier palier est joué automatiquement au début de l'écoute ; le palier suivant (bouton, ou 3 erreurs) est joué automatiquement aussi ;
   - même point de départ tiré au hasard qu'en Classique (0 à 60 % du morceau) : chaque palier rejoue l'extrait depuis ce point, en plus long ;
   - le serveur compte le palier atteint (le barème en dépend) ; le navigateur coupe l'extrait à la bonne durée. Un joueur qui bidouille son navigateur pourrait écouter plus longtemps : acceptable entre potes ;
-  - à la révélation, la vidéo reprend là où le dernier extrait s'est arrêté.
+  - à la révélation, la vidéo reprend là où le dernier extrait s'est arrêté ;
+  - au dernier palier, le bouton « Palier suivant » devient **« Abandonner »** : le joueur qui ne sait pas passe la manche (0 point) et compte comme ayant fini (révélation immédiate en solo, dès que tout le monde a fini en multi).
 
 ### Feuille de route
 

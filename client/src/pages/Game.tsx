@@ -159,7 +159,8 @@ function ListeningStage({ session, state, now }: ListeningStageProps) {
   const timing = MODE_TIMINGS[state.settings.mode];
   // Son temps est écoulé, mais un retardataire écoute encore : la révélation attend.
   const { answer } = state;
-  const stillAnswering = answer.status !== 'correct' && answer.status !== 'eliminated';
+  const stillAnswering =
+    answer.status !== 'correct' && answer.status !== 'eliminated' && answer.status !== 'gaveUp';
   const timeUp = stillAnswering && now > state.phaseEndsAt;
 
   return (
@@ -179,13 +180,14 @@ function ListeningStage({ session, state, now }: ListeningStageProps) {
         <TimerBar endsAt={state.phaseEndsAt} durationMs={timing.listenMs} />
       </div>
 
-      {progressive && answer.status !== 'correct' && !timeUp ? (
+      {progressive && stillAnswering && !timeUp ? (
         <TierControls
           progress={state.progress}
           playing={state.snippetPlaying}
-          disabled={answer.status === 'eliminated'}
+          disabled={false}
           onReplay={() => session.replay()}
           onNext={() => void session.nextTier()}
+          onGiveUp={() => void session.giveUp()}
         />
       ) : null}
 
@@ -208,6 +210,13 @@ function ListeningStage({ session, state, now }: ListeningStageProps) {
         <div className={styles.eliminated} role="status">
           <span className={styles.eliminatedTitle}>{t('progressive.eliminated')}</span>
           <span className={styles.caption}>{t('progressive.eliminated.hint')}</span>
+        </div>
+      ) : null}
+
+      {answer.status === 'gaveUp' ? (
+        <div className={styles.eliminated} role="status">
+          <span className={styles.eliminatedTitle}>{t('progressive.gaveUp')}</span>
+          <span className={styles.caption}>{t('progressive.gaveUp.hint')}</span>
         </div>
       ) : null}
 

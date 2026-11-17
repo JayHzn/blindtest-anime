@@ -75,6 +75,11 @@ export function registerSocketHandlers(socket: GameSocket, { games, rooms }: Man
     ack(games.gameOf(playerId)?.nextTier(playerId) ?? null);
   });
 
+  socket.on('game:giveUp', (ack) => {
+    if (typeof ack !== 'function') return;
+    ack(games.gameOf(playerId)?.giveUp(playerId) ?? null);
+  });
+
   socket.on('audio:ready', (payload) => {
     const report = sanitizeAudioReport(payload);
     if (report) games.gameOf(playerId)?.audioReady(playerId, report.round, report.url);

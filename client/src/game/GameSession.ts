@@ -26,6 +26,8 @@ export type AnswerFeedback =
   | { status: 'wrong'; wrongCount: number }
   /** Mode Progressif : trois erreurs au dernier palier. */
   | { status: 'eliminated'; wrongCount: number }
+  /** Mode Progressif : le joueur a abandonné au dernier palier. */
+  | { status: 'gaveUp'; wrongCount: number }
   | {
       status: 'correct';
       wrongCount: number;
@@ -237,6 +239,24 @@ export class GameSession {
     if (progress.tier > before) void this.playTier();
   }
 
+  /** Mode Progressif : abandonner la manche au dernier palier (0 point). */
+  async giveUp(): Promise<void> {
+    if (!this.isProgressive || this.state.phase !== 'listening' || !this.canAnswer()) return;
+    const round = this.state.round;
+    const progress = await socket
+      .timeout(5000)
+      .emitWithAck('game:giveUp')
+      .catch(() => null);
+    if (this.disposed || this.state.round !== round || !progress?.eliminated) return;
+    this.snippetCount++;
+    this.audio.fadeOut(round, 300);
+    this.update({
+      progress,
+      snippetPlaying: false,
+      answer: { status: 'gaveUp', wrongCount: this.state.answer.wrongCount },
+    });
+  }
+
   /** Clic sur « Activer le son » : le navigateur autorise désormais la lecture. */
   enableSound(): void {
     unlockSfx();
@@ -387,9 +407,10 @@ export class GameSession {
     return this.state.settings.mode === 'progressive';
   }
 
-  /** Le joueur peut encore répondre (pas trouvé, pas éliminé). */
+  /** Le joueur peut encore répondre (pas trouvé, pas éliminé, pas abandonné). */
   private canAnswer(): boolean {
-    return this.state.answer.status !== 'correct' && this.state.answer.status !== 'eliminated';
+    const { status } = this.state.answer;
+    return status !== 'correct' && status !== 'eliminated' && status !== 'gaveUp';
   }
 
   /** Joue l'extrait du palier en cours. */

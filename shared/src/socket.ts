@@ -71,6 +71,8 @@ export interface ClientToServerEvents {
   'game:answer': (answer: AnswerPayload, ack: (result: AnswerResult) => void) => void;
   /** Mode Progressif : passer au palier suivant (extrait plus long, moins de points). */
   'game:nextTier': (ack: (progress: TierProgress | null) => void) => void;
+  /** Mode Progressif : abandonner la manche au dernier palier (0 point). */
+  'game:giveUp': (ack: (progress: TierProgress | null) => void) => void;
   /** Quitte la partie en cours (solo). */
   'game:leave': () => void;
   /** L'audio de la manche (`url` reçue dans `round:prepare`) est préchargé et prêt à jouer. */

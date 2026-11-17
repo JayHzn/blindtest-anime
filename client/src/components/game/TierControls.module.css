@@ -90,6 +90,12 @@
   }
 }
 
+.giveUp {
+  border: 2px solid rgb(255 138 154 / 0.5);
+  background: transparent;
+  color: var(--color-danger);
+}
+
 .action:disabled {
   cursor: not-allowed;
   opacity: 0.5;
