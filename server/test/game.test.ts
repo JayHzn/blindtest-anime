@@ -28,7 +28,6 @@ function setup(themeIds = THEME_IDS, mode: GameModeId = 'classic') {
   const events: Emitted[] = [];
   const emitter: GameEmitter = {
     toPlayer: (to, event, ...args) => events.push({ to, event, payload: args[0] }),
-    toAll: (event, ...args) => events.push({ to: 'all', event, payload: args[0] }),
   };
   const onFinished = vi.fn();
   const game = new Game({
@@ -101,13 +100,24 @@ describe('Game — mode Classique', () => {
     expect(reveal.players[0]?.score).toBe(220);
   });
 
-  it("attend l'audio du joueur, puis démarre quand même au bout du délai", () => {
+  it("attend l'audio, puis le laisse démarrer dès qu'il est prêt, avec tout son temps", () => {
     const t = setup();
     t.game.start();
     vi.advanceTimersByTime(countdownMs);
     expect(t.all('round:start')).toHaveLength(0);
     vi.advanceTimersByTime(AUDIO_WAIT_MS);
-    expect(t.all('round:start')).toHaveLength(1);
+    expect(t.game.currentPhase).toBe('listening');
+    // Son toujours pas prêt : pas de départ pour lui.
+    expect(t.all('round:start')).toHaveLength(0);
+    vi.advanceTimersByTime(4000);
+    t.ready(0);
+    const start = t.last<{ startedAt: number; phaseEndsAt: number }>('round:start');
+    expect(start.phaseEndsAt - start.startedAt).toBe(listenMs);
+    // Son chrono démarre maintenant : la manche dure encore 15 s pour lui.
+    vi.advanceTimersByTime(listenMs - 1);
+    expect(t.game.currentPhase).toBe('listening');
+    vi.advanceTimersByTime(1);
+    expect(t.game.currentPhase).toBe('reveal');
   });
 
   it("démarre dès que l'audio arrive pendant l'attente", () => {
@@ -190,7 +200,7 @@ describe('Game — mode Classique', () => {
   it('se ferme quand le dernier joueur part', () => {
     const t = setup();
     t.game.start();
-    t.game.removePlayer('p1');
+    t.game.leave('p1');
     expect(t.game.isClosed).toBe(true);
     expect(t.media.size).toBe(0);
     vi.advanceTimersByTime(60_000);

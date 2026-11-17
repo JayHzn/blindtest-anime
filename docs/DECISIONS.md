@@ -132,6 +132,17 @@ Validé le 2026-11-17.
 - Reconnexion avec conservation du score.
 - Room supprimée après 10 min vide.
 - Rooms en mémoire (pas de persistance).
+- Mise en œuvre (étape 5) :
+  - identité : le navigateur garde une clé secrète (localStorage) envoyée à la connexion Socket.IO ; le serveur en dérive l'identifiant public (empreinte SHA-256), si bien qu'un joueur retrouve sa room, sa partie et son score après une coupure ou un rechargement ; la clé n'est jamais montrée aux autres ;
+  - tous les événements de jeu sont envoyés joueur par joueur (salon personnel), ce qui rend la reconnexion automatique ; un joueur qui (re)vient reçoit l'état complet (`game:state`), l'audio déjà annoncé et la révélation en cours ;
+  - préchargement : la chanson suivante part au début de l'écoute de la manche en cours (plus tôt que « au début de la révélation » : ~25 s de préchargement) ; les chansons 1 et 2 partent au lancement ;
+  - retardataire : attente de 3 s maximum, puis il démarre seul dès que son son est prêt, avec ses 15 s (ou 60 s en Progressif) ; la manche dure jusqu'à la fin de son chrono ; ses points sont calculés sur son propre départ ; un joueur arrivé en cours de manche joue à partir de la suivante ;
+  - « Je suis prêt » : l'hôte ne peut lancer que lorsque tous les joueurs connectés sont prêts (l'hôte l'est en cliquant « Lancer ») ; un joueur qui recharge la page redevient « pas prêt » ;
+  - écran d'intro de 5 s avant la première manche (mode, manches, joueurs, puis 3-2-1) ;
+  - si le navigateur bloque le son en pleine partie (rechargement sans clic), un bouton « Activer le son » apparaît ;
+  - l'hôte qui se déconnecte ou quitte passe la main au premier joueur connecté ; doublons de pseudo distingués (« Sakura 2 ») ;
+  - lien d'invitation `?room=CODE` ; l'adresse de la page devient elle-même le lien à partager ;
+  - en fin de partie, chacun revient au salon quand il veut (« Retour au salon ») et l'hôte peut relancer.
 
 ## Sons & design
 

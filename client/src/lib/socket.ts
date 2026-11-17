@@ -1,5 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '@blindtest/shared';
+import { getPlayerKey } from './identity';
 import { SERVER_URL } from './server';
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -8,6 +9,7 @@ export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export const socket: GameSocket = io(SERVER_URL || undefined, {
   autoConnect: false,
   transports: ['websocket'],
+  auth: { playerKey: getPlayerKey() },
 });
 
 const CONNECT_TIMEOUT_MS = 15_000;

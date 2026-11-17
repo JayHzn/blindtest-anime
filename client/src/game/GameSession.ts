@@ -5,6 +5,7 @@ import {
   type AnswerPayload,
   type GameEnd,
   type GamePhase,
+  type GameSnapshot,
   type GameSettings,
   type PlayerScore,
   type RoundAudio,
@@ -17,7 +18,7 @@ import { AudioPlayer } from '../lib/audioPlayer';
 import { VideoPreloader } from '../lib/videoPreloader';
 import { serverNow, syncClock } from '../lib/clock';
 import { recordGame, settingsKey } from '../lib/history';
-import { sfx } from '../lib/sfx';
+import { sfx, unlockSfx } from '../lib/sfx';
 import { ensureConnected, socket } from '../lib/socket';
 
 export type AnswerFeedback =
@@ -34,6 +35,8 @@ export type AnswerFeedback =
     };
 
 export interface SessionState {
+  /** Partie solo, ou partie d'une room (écran d'intro au lancement). */
+  kind: 'solo' | 'room';
   status: 'starting' | 'playing' | 'ended' | 'error';
   error: StartGameError | 'connection' | null;
   you: string;
@@ -51,6 +54,8 @@ export interface SessionState {
   progress: TierProgress;
   /** Un extrait est en cours de lecture (mode Progressif). */
   snippetPlaying: boolean;
+  /** Le navigateur a bloqué le son (pas de clic depuis le chargement de la page). */
+  soundBlocked: boolean;
   end: GameEnd | null;
   /** Ancien record pour ces réglages (renseigné en fin de partie). */
   previousBest: number | null;
@@ -71,13 +76,20 @@ export class GameSession {
   private readonly handlers: Handlers;
   private tickTimers: number[] = [];
   private snippetCount = 0;
+  /** Arrivée en cours d'écoute : l'extrait sera lancé dès que l'audio sera prêt. */
+  private pendingResume: { round: number; startedAt: number } | null = null;
+  /** Début d'écoute de la manche en cours, pour relancer l'extrait au bon endroit. */
+  private listenStart: { round: number; startedAt: number } | null = null;
   private disposed = false;
 
   constructor(
     settings: GameSettings,
     private readonly pseudo: string,
+    /** `solo` : la session lance la partie ; `room` : la partie est lancée par l'hôte. */
+    private readonly kind: 'solo' | 'room' = 'solo',
   ) {
     this.state = {
+      kind,
       status: 'starting',
       error: null,
       you: '',
@@ -92,15 +104,19 @@ export class GameSession {
       answer: { status: 'idle', wrongCount: 0 },
       progress: INITIAL_PROGRESS,
       snippetPlaying: false,
+      soundBlocked: false,
       end: null,
       previousBest: null,
     };
+    this.audio.onBlocked = () => this.update({ soundBlocked: true });
     this.handlers = {
+      'game:state': (snapshot) => this.onSnapshot(snapshot),
       'round:prepare': (audio) => this.onPrepare(audio),
       'round:countdown': ({ round, phaseEndsAt }) => this.onCountdown(round, phaseEndsAt),
       'round:start': ({ round, startedAt, phaseEndsAt, videoUrl }) =>
         this.onStart(round, startedAt, phaseEndsAt, videoUrl),
       'player:found': ({ players }) => this.update({ players }),
+      'game:players': (players) => this.update({ players }),
       'round:reveal': (reveal) => this.onReveal(reveal),
       'game:end': (end) => this.onEnd(end),
     };
@@ -128,9 +144,7 @@ export class GameSession {
     }
     if (this.disposed) return false;
 
-    for (const [event, handler] of Object.entries(this.handlers)) {
-      socket.on(event as keyof ServerToClientEvents, handler as never);
-    }
+    this.attachHandlers();
     const response = await socket
       .timeout(10_000)
       .emitWithAck('game:start', { pseudo: this.pseudo, settings: this.state.settings })
@@ -150,6 +164,15 @@ export class GameSession {
       players: snapshot.players,
     });
     return true;
+  }
+
+  /**
+   * Room : la partie vient d'être lancée par l'hôte. À appeler dès la réception
+   * de `room:state` « en jeu », avant les événements de la partie.
+   */
+  attach(you: string): void {
+    this.attachHandlers();
+    this.update({ status: 'playing', you });
   }
 
   async submitAnswer(payload: AnswerPayload): Promise<void> {
@@ -214,6 +237,17 @@ export class GameSession {
     if (progress.tier > before) void this.playTier();
   }
 
+  /** Clic sur « Activer le son » : le navigateur autorise désormais la lecture. */
+  enableSound(): void {
+    unlockSfx();
+    this.update({ soundBlocked: false });
+    if (this.state.phase !== 'listening' || !this.canAnswer()) return;
+    if (this.isProgressive) void this.playTier();
+    else if (this.listenStart?.round === this.state.round) {
+      this.audio.play(this.state.round, this.listenStart.startedAt);
+    }
+  }
+
   setVolume(volume: number): void {
     this.audio.setVolume(volume);
     this.video.setVolume(volume);
@@ -223,7 +257,7 @@ export class GameSession {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    if (this.state.status === 'playing') socket.emit('game:leave');
+    if (this.kind === 'solo' && this.state.status === 'playing') socket.emit('game:leave');
     this.detach();
     this.audio.stopAll();
     this.video.release();
@@ -235,7 +269,37 @@ export class GameSession {
     void this.audio.prepare(round, url, startRatio).then((ok) => {
       if (this.disposed) return;
       socket.emit(ok ? 'audio:ready' : 'audio:failed', { round, url });
+      // Arrivée en cours d'écoute (Classique) : on rattrape l'extrait là où il en est.
+      if (ok && this.pendingResume?.round === round && this.state.phase === 'listening') {
+        this.listenStart = this.pendingResume;
+        if (!this.isProgressive) this.audio.play(round, this.pendingResume.startedAt);
+        this.pendingResume = null;
+      }
     });
+  }
+
+  /** État complet de la partie (arrivée en cours de route, reconnexion). */
+  private onSnapshot(snapshot: GameSnapshot): void {
+    const found = snapshot.players.find((player) => player.id === snapshot.you)?.found ?? false;
+    this.update({
+      status: 'playing',
+      you: snapshot.you,
+      settings: snapshot.settings,
+      totalRounds: snapshot.totalRounds,
+      players: snapshot.players,
+      phase: snapshot.phase,
+      round: snapshot.round,
+      phaseEndsAt: snapshot.phaseEndsAt,
+      progress: snapshot.progress ?? INITIAL_PROGRESS,
+      // Déjà trouvé avant la coupure : on n'affiche plus le champ de réponse.
+      answer: found
+        ? { status: 'correct', wrongCount: 0, points: 0, seasonExact: false, sequenceExact: false }
+        : { status: 'idle', wrongCount: 0 },
+    });
+    if (snapshot.phase === 'listening' && snapshot.listenStartedAt !== null) {
+      this.pendingResume = { round: snapshot.round, startedAt: snapshot.listenStartedAt };
+      this.video.preload(snapshot.round, snapshot.videoUrl);
+    }
   }
 
   private onCountdown(round: number, phaseEndsAt: number): void {
@@ -274,6 +338,7 @@ export class GameSession {
       void this.playTier();
       this.video.preload(round, videoUrl, startTime);
     } else {
+      this.listenStart = { round, startedAt };
       this.audio.play(round, startedAt);
       // La vidéo se précharge à l'endroit où l'extrait sera à la fin de l'écoute.
       const listenS = MODE_TIMINGS.classic.listenMs / 1000;
@@ -343,6 +408,12 @@ export class GameSession {
   private update(patch: Partial<SessionState>): void {
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener();
+  }
+
+  private attachHandlers(): void {
+    for (const [event, handler] of Object.entries(this.handlers)) {
+      socket.on(event as keyof ServerToClientEvents, handler as never);
+    }
   }
 
   private detach(): void {

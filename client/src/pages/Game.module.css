@@ -127,6 +127,81 @@
   font-weight: 700;
 }
 
+.soundBlocked {
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-5);
+  border: 2px solid var(--color-peach);
+  border-radius: var(--radius-pill);
+  background: rgb(255 213 138 / 0.12);
+  color: var(--color-text);
+  font-size: 15px;
+  cursor: pointer;
+  animation: pop 0.4s var(--ease-out);
+}
+
+.soundBlocked strong {
+  margin-left: var(--space-2);
+  color: var(--color-peach);
+  font-family: var(--font-display);
+}
+
+.intro {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+
+.introTitle {
+  font-size: clamp(36px, 5vw, 52px);
+  font-weight: 700;
+  animation: pop 0.6s var(--ease-out);
+}
+
+.introMeta {
+  margin: 0;
+  color: var(--color-lavender);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.introPlayers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.introPlayer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 16px 6px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  font-weight: 700;
+  animation: pop 0.4s var(--ease-out) both;
+}
+
+.introAvatar {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-bg);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
 .eliminated {
   display: flex;
   flex-direction: column;

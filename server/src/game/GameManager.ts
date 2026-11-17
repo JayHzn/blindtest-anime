@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { sanitizePseudo, sanitizeSettings, type StartGameError } from '@blindtest/shared';
-import type { MediaRegistry } from '../media/MediaRegistry';
+import { sanitizeSettings, type GameSettings, type StartGameError } from '@blindtest/shared';
 import type { Catalogue } from '../catalogue/Catalogue';
+import type { MediaRegistry } from '../media/MediaRegistry';
 import { Game, type GameEmitter } from './Game';
 
 /** Musiques de rechange tirées en plus, au cas où un audio ne charge pas. */
@@ -9,7 +9,18 @@ const SPARE_THEMES = 5;
 
 export type CreateGameResult = { ok: true; game: Game } | { ok: false; error: StartGameError };
 
-/** Parties en cours et rattachement joueur → partie. */
+export interface CreateGameOptions {
+  players: { id: string; pseudo: string }[];
+  settings: unknown;
+  /** Appelé quand la partie se termine ou s'arrête. */
+  onFinished?: (game: Game) => void;
+  /** Écran d'intro de la première manche (room). */
+  introMs?: number;
+  /** Attente maximale des retardataires (room : 3 s). */
+  audioWaitMs?: number;
+}
+
+/** Parties en cours (solo et rooms) et rattachement joueur → partie. */
 export class GameManager {
   private readonly games = new Map<string, Game>();
   private readonly gameOfPlayer = new Map<string, string>();
@@ -17,33 +28,52 @@ export class GameManager {
   constructor(
     private readonly catalogue: Catalogue | null,
     private readonly media: MediaRegistry,
-    private readonly createEmitter: (gameId: string) => GameEmitter,
+    private readonly emitter: GameEmitter,
   ) {}
 
-  /** Crée une partie solo (pas encore démarrée : appeler `game.start()`). */
-  createSolo(playerId: string, rawPseudo: unknown, rawSettings: unknown): CreateGameResult {
-    this.leave(playerId);
+  /** Crée une partie (pas encore démarrée : appeler `game.start()`). */
+  create({
+    players,
+    settings: rawSettings,
+    onFinished,
+    introMs,
+    audioWaitMs,
+  }: CreateGameOptions): CreateGameResult {
     if (!this.catalogue) return { ok: false, error: 'catalogue_unavailable' };
-    const settings = sanitizeSettings(rawSettings);
+    const settings: GameSettings | null = sanitizeSettings(rawSettings);
     if (!settings) return { ok: false, error: 'invalid_settings' };
 
     const themes = this.catalogue.pickThemes(settings.filters, settings.rounds + SPARE_THEMES);
     if (themes.length === 0) return { ok: false, error: 'not_enough_themes' };
 
-    const id = randomUUID();
     const game = new Game({
-      id,
+      id: randomUUID(),
       settings,
       catalogue: this.catalogue,
       media: this.media,
-      emitter: this.createEmitter(id),
+      emitter: this.emitter,
       themes,
-      onFinished: (finished) => this.forget(finished),
+      introMs,
+      audioWaitMs,
+      onFinished: (finished) => {
+        this.forget(finished);
+        onFinished?.(finished);
+      },
     });
-    game.addPlayer(playerId, sanitizePseudo(rawPseudo));
-    this.games.set(id, game);
-    this.gameOfPlayer.set(playerId, id);
+    for (const player of players) {
+      this.leave(player.id);
+      game.addPlayer(player.id, player.pseudo);
+      this.gameOfPlayer.set(player.id, game.id);
+    }
+    this.games.set(game.id, game);
     return { ok: true, game };
+  }
+
+  /** Ajoute un joueur à une partie en cours (arrivée dans une room pendant la partie). */
+  join(game: Game, playerId: string, pseudo: string): void {
+    if (this.gameOf(playerId) !== game) this.leave(playerId);
+    this.gameOfPlayer.set(playerId, game.id);
+    game.addPlayer(playerId, pseudo);
   }
 
   gameOf(playerId: string): Game | undefined {
@@ -51,11 +81,21 @@ export class GameManager {
     return id ? this.games.get(id) : undefined;
   }
 
-  /** Le joueur quitte sa partie (bouton Quitter ou déconnexion). */
+  /** Le joueur quitte sa partie (bouton Quitter, sortie de room). */
   leave(playerId: string): void {
     const game = this.gameOf(playerId);
     this.gameOfPlayer.delete(playerId);
-    game?.removePlayer(playerId);
+    game?.leave(playerId);
+  }
+
+  /** Coupure réseau : le joueur garde sa place. */
+  disconnect(playerId: string): void {
+    this.gameOf(playerId)?.disconnect(playerId);
+  }
+
+  /** Reconnexion : la partie renvoie l'état complet au joueur. */
+  reconnect(playerId: string): void {
+    this.gameOf(playerId)?.reconnect(playerId);
   }
 
   get activeGames(): number {

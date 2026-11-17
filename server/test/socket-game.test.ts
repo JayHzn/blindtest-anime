@@ -21,12 +21,16 @@ const once = <E extends keyof ServerToClientEvents>(socket: ClientSocket, event:
 describe('partie solo via Socket.IO', () => {
   let app: App;
   let socket: ClientSocket;
+  let playerId: string;
 
   beforeAll(async () => {
     app = await buildApp(config, { logger: false, catalogue: buildFixtureCatalogue() });
     const address = await app.fastify.listen({ port: 0, host: '127.0.0.1' });
-    socket = connect(address, { transports: ['websocket'] });
-    await once(socket, 'welcome');
+    socket = connect(address, {
+      transports: ['websocket'],
+      auth: { playerKey: 'cle-secrete-de-test-alice-0001' },
+    });
+    ({ playerId } = await once(socket, 'welcome'));
   });
 
   afterAll(async () => {
@@ -45,7 +49,7 @@ describe('partie solo via Socket.IO', () => {
     expect(response.ok).toBe(true);
     const { snapshot } = response as Extract<StartGameResponse, { ok: true }>;
     expect(snapshot.players).toEqual([
-      { id: socket.id, pseudo: 'Alice', score: 0, found: false, connected: true },
+      { id: playerId, pseudo: 'Alice', score: 0, found: false, connected: true },
     ]);
     // Le catalogue d'exemple n'a que 4 franchises avec des OP : partie raccourcie.
     expect(snapshot.totalRounds).toBe(3);

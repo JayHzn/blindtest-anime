@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ThemeCountResponse, ThemeFilters } from '@blindtest/shared';
+import type { GameSettings, ThemeCountResponse, ThemeFilters } from '@blindtest/shared';
+import { useI18n } from '../i18n/context';
 import { apiUrl } from '../lib/server';
 
 /** Nombre de musiques correspondant aux filtres (null pendant le chargement). */
@@ -31,4 +32,18 @@ export function useThemeCount(filters: ThemeFilters): number | null {
   }, [query]);
 
   return result?.query === query ? result.count : null;
+}
+
+/** « 578 musiques disponibles » selon les réglages (count null = pas encore chargé). */
+export function useThemeCountMessage(settings: GameSettings): {
+  count: number | null;
+  message: string;
+} {
+  const { t } = useI18n();
+  const count = useThemeCount(settings.filters);
+  let message = '…';
+  if (count === 0) message = t('setup.count.none');
+  else if (count !== null && count < settings.rounds) message = t('setup.count.few', { count });
+  else if (count !== null) message = t('setup.count', { count: count.toLocaleString() });
+  return { count, message };
 }

@@ -1,8 +1,7 @@
 import type { PlayerScore, RoundReveal } from '@blindtest/shared';
 import { useI18n } from '../../i18n/context';
+import { avatarColor } from '../../lib/avatar';
 import styles from './GameSidebar.module.css';
-
-const AVATAR_COLORS = ['#FF9EC7', '#B9A6FF', '#8FF0C8', '#FFD58A', '#9ED8FF', '#FFB8A6'];
 
 interface GameSidebarProps {
   players: PlayerScore[];
@@ -18,24 +17,39 @@ export function GameSidebar({ players, you, history }: GameSidebarProps) {
   return (
     <aside className={styles.sidebar}>
       {players.length > 1 ? (
-        <ol className={styles.players}>
-          {players.map((player, i) => (
-            <li
-              key={player.id}
-              className={[styles.player, player.id === you ? styles.me : ''].join(' ')}
-            >
-              <span
-                className={styles.avatar}
-                style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}
-                aria-hidden="true"
+        <section className={styles.ranking}>
+          <h2 className={styles.historyTitle}>{t('game.players')}</h2>
+          {/* Classement en direct : on voit qui a trouvé, jamais la réponse. */}
+          <ol className={styles.players}>
+            {players.map((player, i) => (
+              <li
+                key={player.id}
+                className={[
+                  styles.player,
+                  player.id === you ? styles.me : '',
+                  player.connected ? '' : styles.offline,
+                ].join(' ')}
               >
-                {player.pseudo.charAt(0).toUpperCase()}
-              </span>
-              <span className={styles.name}>{player.pseudo}</span>
-              <span className={styles.points}>{player.score}</span>
-            </li>
-          ))}
-        </ol>
+                <span className={styles.rank}>{i + 1}</span>
+                <span
+                  className={styles.avatar}
+                  style={{ background: avatarColor(player.id) }}
+                  aria-hidden="true"
+                >
+                  {player.pseudo.charAt(0).toUpperCase()}
+                </span>
+                <span className={styles.name}>{player.pseudo}</span>
+                {player.found ? (
+                  <span className={styles.found} title={t('game.found')}>
+                    <span aria-hidden="true">✓</span>
+                    <span className={styles.srOnly}>{t('game.found')}</span>
+                  </span>
+                ) : null}
+                <span className={styles.points}>{player.score}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
       ) : (
         <div className={styles.scoreCard}>
           <span className={styles.scoreLabel}>{t('game.score')}</span>

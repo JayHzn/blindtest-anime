@@ -114,6 +114,40 @@
   background: var(--color-surface-2);
 }
 
+.rank {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-surface-3);
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.gold {
+  background: #ffd58a;
+  color: var(--color-bg);
+}
+
+.silver {
+  background: #d9d3e6;
+  color: var(--color-bg);
+}
+
+.bronze {
+  background: #f0b48a;
+  color: var(--color-bg);
+}
+
+.mine {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .roundNumber {
   width: 28px;
   flex-shrink: 0;

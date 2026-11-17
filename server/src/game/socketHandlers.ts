@@ -1,73 +1,119 @@
 import type { Socket } from 'socket.io';
-import type { ClientToServerEvents, ServerToClientEvents } from '@blindtest/shared';
+import {
+  sanitizePseudo,
+  type ClientToServerEvents,
+  type ServerToClientEvents,
+} from '@blindtest/shared';
 import type { IoServer } from '../app';
+import { playerChannel } from '../players';
+import type { RoomManager } from '../rooms/RoomManager';
 import type { GameEmitter } from './Game';
 import type { GameManager } from './GameManager';
 import { sanitizeAnswer, sanitizeAudioReport } from './sanitize';
 
-type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+export interface SocketData {
+  playerId: string;
+}
+
+type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents, object, SocketData>;
 type LooseEmit = (event: string, ...args: unknown[]) => boolean;
 
-export const gameRoom = (gameId: string): string => `game:${gameId}`;
-
-/** Émetteur Socket.IO d'une partie : un joueur = un socket (salon = son id). */
-export function socketEmitter(io: IoServer, gameId: string): GameEmitter {
+/** Envoi à un joueur, sur tous ses sockets (salon personnel). */
+export function playerEmitter(io: IoServer): GameEmitter {
   return {
     toPlayer(playerId, event, ...args) {
-      (io.to(playerId).emit as LooseEmit)(event, ...args);
-    },
-    toAll(event, ...args) {
-      (io.to(gameRoom(gameId)).emit as LooseEmit)(event, ...args);
+      (io.to(playerChannel(playerId)).emit as LooseEmit)(event, ...args);
     },
   };
 }
 
-export function registerGameHandlers(socket: GameSocket, manager: GameManager): void {
-  const leaveCurrent = () => {
-    const game = manager.gameOf(socket.id);
-    if (game) void socket.leave(gameRoom(game.id));
-    manager.leave(socket.id);
-  };
+interface Managers {
+  games: GameManager;
+  rooms: RoomManager;
+}
+
+export function registerSocketHandlers(socket: GameSocket, { games, rooms }: Managers): void {
+  const { playerId } = socket.data;
+
+  // Retour après une coupure : room et partie renvoient leur état.
+  if (rooms.roomCodeOf(playerId)) rooms.reconnect(playerId);
+  else games.reconnect(playerId);
+
+  // ─── Solo ─────────────────────────────────────────────────────────────────
 
   socket.on('game:start', (payload, ack) => {
     if (typeof ack !== 'function') return;
-    leaveCurrent();
-    const result = manager.createSolo(socket.id, payload?.pseudo, payload?.settings);
+    rooms.leave(playerId);
+    const result = games.create({
+      players: [{ id: playerId, pseudo: sanitizePseudo(payload?.pseudo) }],
+      settings: payload?.settings,
+    });
     if (!result.ok) {
       ack(result);
       return;
     }
-    const { game } = result;
-    void socket.join(gameRoom(game.id));
-    ack({ ok: true, snapshot: game.snapshot(socket.id) });
-    game.start();
+    ack({ ok: true, snapshot: result.game.snapshot(playerId) });
+    result.game.start();
   });
+
+  socket.on('game:leave', () => games.leave(playerId));
+
+  // ─── Pendant une partie (solo ou room) ────────────────────────────────────
 
   socket.on('game:answer', (payload, ack) => {
     if (typeof ack !== 'function') return;
-    const game = manager.gameOf(socket.id);
+    const game = games.gameOf(playerId);
     ack(
       game
-        ? game.answer(socket.id, sanitizeAnswer(payload))
+        ? game.answer(playerId, sanitizeAnswer(payload))
         : { accepted: false, reason: 'not_in_game' },
     );
   });
 
   socket.on('game:nextTier', (ack) => {
     if (typeof ack !== 'function') return;
-    ack(manager.gameOf(socket.id)?.nextTier(socket.id) ?? null);
+    ack(games.gameOf(playerId)?.nextTier(playerId) ?? null);
   });
 
   socket.on('audio:ready', (payload) => {
     const report = sanitizeAudioReport(payload);
-    if (report) manager.gameOf(socket.id)?.audioReady(socket.id, report.round, report.url);
+    if (report) games.gameOf(playerId)?.audioReady(playerId, report.round, report.url);
   });
 
   socket.on('audio:failed', (payload) => {
     const report = sanitizeAudioReport(payload);
-    if (report) manager.gameOf(socket.id)?.audioFailed(socket.id, report.round, report.url);
+    if (report) games.gameOf(playerId)?.audioFailed(playerId, report.round, report.url);
   });
 
-  socket.on('game:leave', leaveCurrent);
-  socket.on('disconnect', () => manager.leave(socket.id));
+  // ─── Rooms ────────────────────────────────────────────────────────────────
+
+  socket.on('room:create', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    games.leave(playerId);
+    ack(rooms.create(playerId, payload?.pseudo));
+  });
+
+  socket.on('room:join', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    ack(rooms.join(payload?.code, playerId, payload?.pseudo));
+  });
+
+  socket.on('room:leave', () => rooms.leave(playerId));
+  socket.on('room:settings', (settings) => rooms.updateSettings(playerId, settings));
+  socket.on('room:ready', (ready) => rooms.setReady(playerId, ready === true));
+
+  socket.on('room:start', (ack) => {
+    if (typeof ack !== 'function') return;
+    ack(rooms.start(playerId));
+  });
+
+  // ─── Déconnexion ──────────────────────────────────────────────────────────
+
+  socket.on('disconnect', async () => {
+    // Un autre onglet du même joueur est encore connecté : rien ne change.
+    const stillThere = await socket.nsp.in(playerChannel(playerId)).fetchSockets();
+    if (stillThere.length > 0) return;
+    if (rooms.roomCodeOf(playerId)) rooms.disconnect(playerId);
+    else games.disconnect(playerId);
+  });
 }

@@ -162,6 +162,12 @@ export interface GameSnapshot {
   /** Fin de la phase en cours (heure serveur, ms). */
   phaseEndsAt: number;
   players: PlayerScore[];
+  /** Début de l'écoute de la manche en cours (pour reprendre l'extrait en cours de route). */
+  listenStartedAt: number | null;
+  /** Vidéo (opaque) de la manche en cours, si l'écoute a commencé. */
+  videoUrl: string | null;
+  /** Mode Progressif : progression du joueur dans la manche en cours. */
+  progress: TierProgress | null;
 }
 
 export interface PlayerRoundResult {

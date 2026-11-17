@@ -26,18 +26,23 @@ import type { ThemeRow } from '../catalogue/types';
 
 type Events = ServerToClientEvents;
 
-/** Diffusion des événements d'une partie (Socket.IO en production, espion en test). */
+/**
+ * Envoi d'événements à un joueur (Socket.IO en production, espion en test).
+ * Les diffusions passent joueur par joueur : un joueur qui se reconnecte
+ * (nouveau socket, même identifiant) continue de tout recevoir.
+ */
 export interface GameEmitter {
   toPlayer<E extends keyof Events>(
     playerId: string,
     event: E,
     ...args: Parameters<Events[E]>
   ): void;
-  toAll<E extends keyof Events>(event: E, ...args: Parameters<Events[E]>): void;
 }
 
 /** Attente maximale de l'audio des joueurs après le compte à rebours. */
 export const AUDIO_WAIT_MS = 10_000;
+/** Délai avant d'arrêter une partie dont tous les joueurs sont déconnectés. */
+export const ABANDON_GRACE_MS = 30_000;
 /** Le point de départ est tiré entre 0 et 60 % du morceau (il reste toujours de quoi écouter). */
 const START_RATIO_MAX = 0.6;
 
@@ -57,7 +62,15 @@ interface RoundState {
   /** Jeton opaque de la vidéo, créé au début de l'écoute. */
   videoToken: string | null;
   startRatio: number;
+  /** Début commun de l'écoute (pour les joueurs dont le son était prêt). */
   listenStartedAt: number | null;
+  /** Joueurs présents au début de l'écoute : eux seuls jouent cette manche. */
+  participants: Set<string>;
+  /**
+   * Début d'écoute de chaque joueur. Un retardataire (son pas encore chargé)
+   * démarre dès que son son est prêt, avec son propre chrono, sans pénalité.
+   */
+  starts: Map<string, number>;
   results: Map<string, PlayerRoundResult>;
   /** Mode Progressif : palier et essais de chaque joueur. */
   progress: Map<string, TierProgress>;
@@ -73,6 +86,10 @@ export interface GameOptions {
   themes: ThemeRow[];
   random?: () => number;
   onFinished?: (game: Game) => void;
+  /** Durée du compte à rebours de la première manche (écran d'intro en room). */
+  introMs?: number;
+  /** Attente maximale des retardataires avant de démarrer l'écoute. */
+  audioWaitMs?: number;
 }
 
 /**
@@ -90,6 +107,8 @@ export class Game {
   private readonly emitter: GameEmitter;
   private readonly random: () => number;
   private readonly onFinished?: (game: Game) => void;
+  private readonly introMs: number;
+  private readonly audioWaitMs: number;
 
   private readonly players = new Map<string, PlayerState>();
   private readonly rounds: RoundState[];
@@ -99,6 +118,10 @@ export class Game {
   private phaseEndsAt = 0;
   private waitingForAudio = false;
   private timer: NodeJS.Timeout | null = null;
+  private abandonTimer: NodeJS.Timeout | null = null;
+  /** Manches dont l'audio a déjà été envoyé (pour les joueurs qui arrivent en cours de route). */
+  private readonly preparedRounds = new Set<number>();
+  private lastReveal: RoundReveal | null = null;
   private started = false;
   private closed = false;
 
@@ -111,6 +134,8 @@ export class Game {
     this.emitter = options.emitter;
     this.random = options.random ?? Math.random;
     this.onFinished = options.onFinished;
+    this.introMs = options.introMs ?? this.timing.countdownMs;
+    this.audioWaitMs = options.audioWaitMs ?? AUDIO_WAIT_MS;
 
     const total = Math.min(options.settings.rounds, options.themes.length);
     this.rounds = options.themes.slice(0, total).map((theme) => this.createRound(theme));
@@ -129,19 +154,59 @@ export class Game {
     return this.closed;
   }
 
-  addPlayer(id: string, pseudo: string): void {
-    this.players.set(id, { id, pseudo, score: 0, connected: true, ready: new Map() });
+  get playerIds(): string[] {
+    return [...this.players.keys()];
   }
 
-  /** Retire un joueur ; la partie se termine s'il n'en reste plus. */
-  removePlayer(id: string): void {
+  /** Ajoute un joueur ; en cours de partie, il reçoit l'état et joue dès que possible. */
+  addPlayer(id: string, pseudo: string): void {
+    if (this.players.has(id)) {
+      this.reconnect(id);
+      return;
+    }
+    this.players.set(id, { id, pseudo, score: 0, connected: true, ready: new Map() });
+    if (this.started) {
+      this.syncPlayer(id);
+      this.broadcastPlayers();
+    }
+  }
+
+  /** Le joueur revient (nouveau socket) : on lui renvoie l'état complet. */
+  reconnect(id: string): void {
+    const player = this.players.get(id);
+    if (!player || this.closed) return;
+    player.connected = true;
+    this.clearAbandonTimer();
+    this.syncPlayer(id);
+    this.broadcastPlayers();
+  }
+
+  /** Coupure réseau : le joueur garde sa place et son score ; la partie continue. */
+  disconnect(id: string): void {
     const player = this.players.get(id);
     if (!player) return;
     player.connected = false;
+    this.afterPlayerLost(() => {
+      // Plus personne : on laisse un délai pour revenir avant d'arrêter la partie.
+      this.clearAbandonTimer();
+      this.abandonTimer = setTimeout(() => this.close(), ABANDON_GRACE_MS);
+    });
+  }
+
+  /** Le joueur quitte volontairement la partie. */
+  leave(id: string): void {
+    if (!this.players.delete(id)) return;
+    this.afterPlayerLost(() => this.close());
+  }
+
+  private afterPlayerLost(whenEmpty: () => void): void {
+    if (this.closed) return;
     if (this.connectedPlayers().length === 0) {
-      this.close();
+      whenEmpty();
       return;
     }
+    this.broadcastPlayers();
+    // Les joueurs restants n'attendent pas celui qui est parti.
     if (this.phase === 'listening' && this.everyoneDone()) this.schedule(0, () => this.endRound());
     if (this.waitingForAudio && this.everyoneReady()) this.startListening();
   }
@@ -149,11 +214,17 @@ export class Game {
   start(): void {
     if (this.started || this.closed) return;
     this.started = true;
+    // Chacun reçoit l'état initial (joueurs, nombre de manches) avant la première manche.
+    for (const id of this.players.keys())
+      this.emitter.toPlayer(id, 'game:state', this.snapshot(id));
+    // Les chansons 1 et 2 se chargent pendant le compte à rebours / l'écran d'intro.
     this.emitPrepare(0);
+    this.emitPrepare(1);
     this.enterCountdown(0);
   }
 
   snapshot(forPlayer: string): GameSnapshot {
+    const round = this.rounds[this.roundIndex];
     return {
       gameId: this.id,
       you: forPlayer,
@@ -163,6 +234,10 @@ export class Game {
       totalRounds: this.totalRounds,
       phaseEndsAt: this.phaseEndsAt,
       players: this.scoreboard(),
+      // Début d'écoute propre au joueur (null s'il n'a pas encore démarré cette manche).
+      listenStartedAt: round?.starts.get(forPlayer) ?? null,
+      videoUrl: round?.videoToken ? videoPath(round.videoToken) : null,
+      progress: this.isProgressive && round ? { ...this.progressOf(round, forPlayer) } : null,
     };
   }
 
@@ -174,6 +249,22 @@ export class Game {
     player.ready.set(round, url);
     if (this.waitingForAudio && round === this.roundIndex && this.everyoneReady()) {
       this.startListening();
+      return;
+    }
+    // Retardataire : l'écoute a commencé sans lui ; il démarre maintenant, avec tout son temps.
+    const current = this.rounds[this.roundIndex]!;
+    if (
+      this.phase === 'listening' &&
+      round === this.roundIndex &&
+      current.participants.has(playerId) &&
+      !current.starts.has(playerId)
+    ) {
+      this.startPlayer(current, playerId, Date.now());
+      const deadline = Date.now() + this.timing.listenMs;
+      if (deadline > this.phaseEndsAt) {
+        this.phaseEndsAt = deadline;
+        this.schedule(this.timing.listenMs, () => this.endRound());
+      }
     }
   }
 
@@ -200,14 +291,20 @@ export class Game {
     const player = this.players.get(playerId);
     if (!player || !player.connected) return { accepted: false, reason: 'not_in_game' };
     const round = this.rounds[this.roundIndex]!;
-    if (this.phase !== 'listening' || round.listenStartedAt === null) {
+    // Chaque joueur répond pendant SON temps d'écoute (les retardataires ont le leur).
+    const startedAt = round.starts.get(playerId);
+    if (
+      this.phase !== 'listening' ||
+      startedAt === undefined ||
+      Date.now() > startedAt + this.timing.listenMs
+    ) {
       return { accepted: false, reason: 'not_listening' };
     }
     if (round.results.get(playerId)?.correct) return { accepted: false, reason: 'already_found' };
     const progress = this.isProgressive ? this.progressOf(round, playerId) : null;
     if (progress?.eliminated) return { accepted: false, reason: 'eliminated' };
 
-    const elapsedMs = Math.max(0, Date.now() - round.listenStartedAt);
+    const elapsedMs = Math.max(0, Date.now() - startedAt);
     const verdict = this.catalogue.validate(round.theme.id, payload);
 
     if (!verdict.correct) {
@@ -242,7 +339,7 @@ export class Game {
       tier: progress?.tier ?? null,
     });
 
-    this.emitter.toAll('player:found', { playerId, players: this.scoreboard() });
+    this.broadcast('player:found', { playerId, players: this.scoreboard() });
     // Tout le monde a fini : révélation tout de suite (après l'accusé de réception).
     if (this.everyoneDone()) this.schedule(0, () => this.endRound());
 
@@ -299,6 +396,7 @@ export class Game {
     if (this.closed) return;
     this.closed = true;
     this.clearTimer();
+    this.clearAbandonTimer();
     for (const round of this.rounds) this.revokeRound(round);
     this.onFinished?.(this);
   }
@@ -309,9 +407,11 @@ export class Game {
     this.roundIndex = index;
     this.phase = 'countdown';
     this.waitingForAudio = false;
-    this.phaseEndsAt = Date.now() + this.timing.countdownMs;
-    this.emitter.toAll('round:countdown', { round: index, phaseEndsAt: this.phaseEndsAt });
-    this.schedule(this.timing.countdownMs, () => this.afterCountdown());
+    // Première manche : écran d'intro (plus long en room) pendant que les chansons 1 et 2 chargent.
+    const duration = index === 0 ? this.introMs : this.timing.countdownMs;
+    this.phaseEndsAt = Date.now() + duration;
+    this.broadcast('round:countdown', { round: index, phaseEndsAt: this.phaseEndsAt });
+    this.schedule(duration, () => this.afterCountdown());
   }
 
   private afterCountdown(): void {
@@ -321,34 +421,47 @@ export class Game {
     }
     // Quelqu'un charge encore l'audio : on l'attend un peu, puis on démarre quand même.
     this.waitingForAudio = true;
-    this.schedule(AUDIO_WAIT_MS, () => this.startListening());
+    this.schedule(this.audioWaitMs, () => this.startListening());
   }
 
   private startListening(): void {
     const round = this.rounds[this.roundIndex]!;
+    const now = Date.now();
     this.waitingForAudio = false;
     this.phase = 'listening';
-    round.listenStartedAt = Date.now();
-    this.phaseEndsAt = round.listenStartedAt + this.timing.listenMs;
+    round.listenStartedAt = now;
+    this.phaseEndsAt = now + this.timing.listenMs;
     // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque.
     if (round.theme.videoUrl && !round.videoToken) {
       round.videoToken = this.media.register(round.theme.videoUrl, 'video');
     }
-    this.emitter.toAll('round:start', {
+    // Les joueurs dont le son est prêt démarrent ensemble ; les autres dès qu'il le sera.
+    const url = audioPath(round.token);
+    for (const player of this.connectedPlayers()) {
+      round.participants.add(player.id);
+      if (player.ready.get(this.roundIndex) === url) this.startPlayer(round, player.id, now);
+    }
+    // Préchargement de la manche suivante pendant l'écoute.
+    if (!this.preparedRounds.has(this.roundIndex + 1)) this.emitPrepare(this.roundIndex + 1);
+    this.schedule(this.timing.listenMs, () => this.endRound());
+  }
+
+  /** Lance l'écoute pour un joueur (début commun, ou plus tard pour un retardataire). */
+  private startPlayer(round: RoundState, playerId: string, startedAt: number): void {
+    round.starts.set(playerId, startedAt);
+    this.emitter.toPlayer(playerId, 'round:start', {
       round: this.roundIndex,
-      startedAt: round.listenStartedAt,
-      phaseEndsAt: this.phaseEndsAt,
+      startedAt,
+      phaseEndsAt: startedAt + this.timing.listenMs,
       videoUrl: round.videoToken ? videoPath(round.videoToken) : null,
     });
-    // Préchargement de la manche suivante pendant l'écoute.
-    if (this.roundIndex + 1 < this.totalRounds) this.emitPrepare(this.roundIndex + 1);
-    this.schedule(this.timing.listenMs, () => this.endRound());
   }
 
   private endRound(): void {
     this.phase = 'reveal';
     this.phaseEndsAt = Date.now() + this.timing.revealMs;
-    this.emitter.toAll('round:reveal', this.buildReveal());
+    this.lastReveal = this.buildReveal();
+    this.broadcast('round:reveal', this.lastReveal);
     this.schedule(this.timing.revealMs, () => {
       if (this.roundIndex + 1 < this.totalRounds) this.enterCountdown(this.roundIndex + 1);
       else this.finish('completed');
@@ -358,7 +471,7 @@ export class Game {
   private finish(reason: GameEndReason): void {
     this.phase = 'finished';
     this.phaseEndsAt = Date.now();
-    this.emitter.toAll('game:end', { reason, players: this.scoreboard() });
+    this.broadcast('game:end', { reason, players: this.scoreboard() });
     this.close();
   }
 
@@ -381,6 +494,8 @@ export class Game {
       startRatio: Math.round(this.random() * START_RATIO_MAX * 1000) / 1000,
       videoToken: null,
       listenStartedAt: null,
+      participants: new Set(),
+      starts: new Map(),
       results: new Map(),
       progress: new Map(),
     };
@@ -399,7 +514,8 @@ export class Game {
       url: audioPath(round.token),
       startRatio: round.startRatio,
     };
-    this.emitter.toAll('round:prepare', audio);
+    this.preparedRounds.add(index);
+    this.broadcast('round:prepare', audio);
   }
 
   private buildReveal(): RoundReveal {
@@ -452,6 +568,36 @@ export class Game {
     };
   }
 
+  /** État, audio déjà annoncé et révélation en cours, pour un joueur qui (re)arrive. */
+  private syncPlayer(id: string): void {
+    this.emitter.toPlayer(id, 'game:state', this.snapshot(id));
+    for (const index of [...this.preparedRounds].sort((a, b) => a - b)) {
+      const round = this.rounds[index];
+      if (index < this.roundIndex || !round) continue;
+      this.emitter.toPlayer(id, 'round:prepare', {
+        round: index,
+        url: audioPath(round.token),
+        startRatio: round.startRatio,
+      });
+    }
+    if (this.phase === 'reveal' && this.lastReveal) {
+      this.emitter.toPlayer(id, 'round:reveal', { ...this.lastReveal, players: this.scoreboard() });
+    }
+  }
+
+  private broadcast<E extends keyof Events>(event: E, ...args: Parameters<Events[E]>): void {
+    for (const id of this.players.keys()) this.emitter.toPlayer(id, event, ...args);
+  }
+
+  private broadcastPlayers(): void {
+    if (this.started) this.broadcast('game:players', this.scoreboard());
+  }
+
+  private clearAbandonTimer(): void {
+    if (this.abandonTimer) clearTimeout(this.abandonTimer);
+    this.abandonTimer = null;
+  }
+
   private scoreboard(): PlayerScore[] {
     const round = this.rounds[this.roundIndex];
     return [...this.players.values()]
@@ -475,12 +621,15 @@ export class Game {
   }
 
   /** Tous les joueurs connectés ont trouvé (ou sont éliminés, en Progressif). */
+  /** Tous les participants connectés ont trouvé (ou sont éliminés, en Progressif). */
   private everyoneDone(): boolean {
     const round = this.rounds[this.roundIndex]!;
-    return this.connectedPlayers().every(
-      (player) =>
-        round.results.get(player.id)?.correct || round.progress.get(player.id)?.eliminated,
-    );
+    return this.connectedPlayers()
+      .filter((player) => round.participants.has(player.id))
+      .every(
+        (player) =>
+          round.results.get(player.id)?.correct || round.progress.get(player.id)?.eliminated,
+      );
   }
 
   private schedule(delayMs: number, action: () => void): void {

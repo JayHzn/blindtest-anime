@@ -5,14 +5,19 @@ import type { SessionState } from '../game/GameSession';
 import { useI18n } from '../i18n/context';
 import styles from './Results.module.css';
 
+type ResultsActions =
+  | { kind: 'solo'; onReplay: () => void; onSettings: () => void; onHome: () => void }
+  | { kind: 'room'; onBackToLobby: () => void; onLeave: () => void };
+
 interface ResultsProps {
   state: SessionState;
-  onReplay: () => void;
-  onSettings: () => void;
-  onHome: () => void;
+  actions: ResultsActions;
 }
 
-export function Results({ state, onReplay, onSettings, onHome }: ResultsProps) {
+/** Couleurs du podium (or, argent, bronze). */
+const PODIUM = [styles.gold, styles.silver, styles.bronze];
+
+export function Results({ state, actions }: ResultsProps) {
   const { t, lang } = useI18n();
   const me = state.players.find((player) => player.id === state.you);
   const score = me?.score ?? 0;
@@ -42,17 +47,50 @@ export function Results({ state, onReplay, onSettings, onHome }: ResultsProps) {
             <p className={styles.best}>{t('results.previousBest', { score: previousBest })}</p>
           ) : null}
           <div className={styles.actions}>
-            <Button size="lg" onClick={onReplay}>
-              {t('results.replay')}
-            </Button>
-            <Button size="lg" variant="secondary" onClick={onSettings}>
-              {t('results.settings')}
-            </Button>
-            <Button variant="ghost" onClick={onHome}>
-              {t('results.home')}
-            </Button>
+            {actions.kind === 'solo' ? (
+              <>
+                <Button size="lg" onClick={actions.onReplay}>
+                  {t('results.replay')}
+                </Button>
+                <Button size="lg" variant="secondary" onClick={actions.onSettings}>
+                  {t('results.settings')}
+                </Button>
+                <Button variant="ghost" onClick={actions.onHome}>
+                  {t('results.home')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="lg" onClick={actions.onBackToLobby}>
+                  {t('results.backToLobby')}
+                </Button>
+                <Button variant="ghost" onClick={actions.onLeave}>
+                  {t('room.leave')}
+                </Button>
+              </>
+            )}
           </div>
         </Card>
+
+        {state.players.length > 1 ? (
+          <Card className={styles.recap}>
+            <h2 className={styles.recapTitle}>{t('results.ranking')}</h2>
+            <ol className={styles.rounds}>
+              {state.players.map((player, i) => (
+                <li
+                  key={player.id}
+                  className={[styles.round, player.id === state.you ? styles.mine : ''].join(' ')}
+                >
+                  <span className={[styles.rank, PODIUM[i] ?? ''].join(' ')}>{i + 1}</span>
+                  <span className={styles.roundInfo}>
+                    <span className={styles.roundTitle}>{player.pseudo}</span>
+                  </span>
+                  <span className={styles.roundPoints}>{player.score}</span>
+                </li>
+              ))}
+            </ol>
+          </Card>
+        ) : null}
 
         {state.history.length > 0 ? (
           <Card className={styles.recap}>

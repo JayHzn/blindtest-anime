@@ -20,6 +20,12 @@ export class AudioPlayer {
   private volume = 0.8;
   /** Incrémenté à chaque extrait : un nouvel extrait interrompt le précédent. */
   private snippetToken = 0;
+  /** Appelé si le navigateur refuse la lecture faute de clic préalable (rechargement de page…). */
+  onBlocked: (() => void) | null = null;
+
+  private handlePlayError = (error: unknown): void => {
+    if (error instanceof DOMException && error.name === 'NotAllowedError') this.onBlocked?.();
+  };
 
   setVolume(volume: number): void {
     this.volume = volume;
@@ -82,9 +88,8 @@ export class AudioPlayer {
     const lateBy = Math.max(0, serverNow() - startedAt) / 1000;
     track.element.currentTime = track.startTime + lateBy;
     track.element.volume = this.volume;
-    void track.element.play().catch(() => {
-      // lecture refusée (onglet en arrière-plan…) : la manche continue sans son
-    });
+    // Lecture refusée : la manche continue, et le joueur peut réactiver le son.
+    void track.element.play().catch(this.handlePlayError);
   }
 
   /**
@@ -101,7 +106,7 @@ export class AudioPlayer {
     const endAt = track.startTime + durationMs / 1000;
     element.currentTime = track.startTime;
     element.volume = this.volume;
-    void element.play().catch(() => {});
+    void element.play().catch(this.handlePlayError);
 
     return new Promise((resolve) => {
       // Vérifié à chaque image : arrêt à la bonne position, à ~16 ms près.

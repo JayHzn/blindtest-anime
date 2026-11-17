@@ -17,6 +17,13 @@ export const storage = {
       // stockage indisponible : on ignore
     }
   },
+  remove(key: string): void {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // stockage indisponible : on ignore
+    }
+  },
   getJson<T>(key: string): T | null {
     const raw = storage.get(key);
     if (!raw) return null;
@@ -37,4 +44,6 @@ export const STORAGE_KEYS = {
   settings: 'bta:settings',
   volume: 'bta:volume',
   history: 'bta:history',
+  playerKey: 'bta:playerKey',
+  room: 'bta:room',
 } as const;
