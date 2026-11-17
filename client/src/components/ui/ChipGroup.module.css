@@ -22,9 +22,12 @@
     transform 0.15s var(--ease-out);
 }
 
-.chip:hover:not(:disabled) {
-  color: var(--color-text);
-  transform: translateY(-1px);
+/* Survol : souris uniquement (évite l'effet collé après un toucher). */
+@media (hover: hover) {
+  .chip:hover:not(:disabled) {
+    color: var(--color-text);
+    transform: translateY(-1px);
+  }
 }
 
 .chip:disabled {

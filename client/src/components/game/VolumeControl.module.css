@@ -19,3 +19,10 @@
   accent-color: var(--color-accent);
   cursor: pointer;
 }
+
+@media (max-width: 560px) {
+  /* Sur téléphone, les boutons de volume de l'appareil suffisent. */
+  .control {
+    display: none;
+  }
+}

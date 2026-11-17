@@ -21,8 +21,11 @@
     color 0.15s;
 }
 
-.option:hover {
-  color: var(--color-text);
+/* Survol : souris uniquement (évite l'effet collé après un toucher). */
+@media (hover: hover) {
+  .option:hover {
+    color: var(--color-text);
+  }
 }
 
 .active {
@@ -30,6 +33,9 @@
   color: var(--color-bg);
 }
 
-.active:hover {
-  color: var(--color-bg);
+/* Survol : souris uniquement (évite l'effet collé après un toucher). */
+@media (hover: hover) {
+  .active:hover {
+    color: var(--color-bg);
+  }
 }

@@ -86,7 +86,7 @@ export const en: Record<MessageKey, string> = {
   'game.loadingAudio': 'Loading the clip…',
   'game.question': 'Which anime is it?',
   'game.answer.label': 'Your answer',
-  'game.answer.placeholder': 'Type the anime name…',
+  'game.answer.placeholder': 'Anime name…',
   'game.sequence.label': 'OP/ED #',
   'game.sequence.hint': '+25 if exact',
   'game.submit': 'Submit',

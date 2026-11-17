@@ -244,4 +244,26 @@
   .bigNumber {
     font-size: 72px;
   }
+
+  .page {
+    gap: var(--space-3);
+  }
+
+  .roundPill {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .countdown,
+  .listening {
+    gap: var(--space-4);
+  }
+
+  .timerLabels {
+    font-size: 19px;
+  }
+
+  .seconds {
+    font-size: 17px;
+  }
 }

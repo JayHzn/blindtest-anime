@@ -84,7 +84,7 @@ export const fr = {
   'game.loadingAudio': "Chargement de l'extrait…",
   'game.question': "C'est quel anime ?",
   'game.answer.label': 'Ta réponse',
-  'game.answer.placeholder': "Tape le nom de l'anime…",
+  'game.answer.placeholder': "Nom de l'anime…",
   'game.sequence.label': 'N° OP/ED',
   'game.sequence.hint': '+25 si exact',
   'game.submit': 'Valider',

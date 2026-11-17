@@ -25,3 +25,10 @@
   background: var(--color-lavender);
   opacity: 0.45;
 }
+
+@media (max-width: 560px) {
+  /* Le numéro de manche reste affiché à côté : on gagne une ligne sur téléphone. */
+  .dots {
+    display: none;
+  }
+}

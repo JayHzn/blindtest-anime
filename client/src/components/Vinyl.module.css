@@ -30,3 +30,14 @@
     transform: rotate(360deg);
   }
 }
+
+@media (max-width: 560px) {
+  /* Taille passée en style inline : on la réduit sur téléphone pour garder le champ de réponse visible. */
+  .vinyl {
+    width: 96px !important;
+    height: 96px !important;
+    box-shadow:
+      0 0 0 6px #2e2340,
+      var(--shadow-glow);
+  }
+}

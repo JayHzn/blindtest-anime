@@ -51,3 +51,11 @@ input {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Pas de surbrillance bleue au toucher sur mobile : les composants ont leurs propres états. */
+button,
+a,
+input,
+label {
+  -webkit-tap-highlight-color: transparent;
+}
