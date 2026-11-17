@@ -1,4 +1,5 @@
 import type { GameSettings } from './game';
+import type { PickingState } from './playlist';
 
 export const ROOM_MAX_PLAYERS = 8;
 /** Lettres sans ambiguïté à l'oral ou à l'écrit (pas de I, O). */
@@ -25,8 +26,10 @@ export interface RoomState {
   hostId: string;
   members: RoomMember[];
   settings: GameSettings;
-  /** `lobby` : salon d'attente ; `playing` : partie en cours. */
-  status: 'lobby' | 'playing';
+  /** `lobby` : salon d'attente ; `picking` : choix des chansons (Playlist) ; `playing` : partie en cours. */
+  status: 'lobby' | 'picking' | 'playing';
+  /** Playlist : phase de choix en cours. */
+  picking?: PickingState;
 }
 
 export type RoomError =
@@ -36,6 +39,7 @@ export type RoomError =
   | 'not_in_room'
   | 'already_playing'
   | 'players_not_ready'
+  | 'not_enough_players'
   | 'catalogue_unavailable'
   | 'not_enough_themes'
   | 'invalid_settings';

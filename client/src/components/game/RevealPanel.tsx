@@ -3,6 +3,7 @@ import { normalize, PROGRESSIVE, type RoundReveal } from '@blindtest/shared';
 import type { GameSession } from '../../game/GameSession';
 import { secondsLeft, useServerNow } from '../../hooks/useServerNow';
 import { useI18n } from '../../i18n/context';
+import { avatarColor } from '../../lib/avatar';
 import { isBuffered } from '../../lib/videoPreloader';
 import styles from './RevealPanel.module.css';
 
@@ -69,7 +70,7 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
   const showCard = !hasVideo || failed || !playing;
 
   return (
-    <div className={styles.panel}>
+    <div className={[styles.panel, reveal.playlist ? styles.withPlaylist : ''].join(' ')}>
       <div className={styles.media}>
         <div ref={host} className={styles.videoHost} />
         {/* Jaquette tant que la vidéo charge, ou à sa place si elle échoue. */}
@@ -106,8 +107,14 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
           </p>
         ) : null}
 
+        {reveal.playlist ? <PlaylistBanner reveal={reveal} you={you} /> : null}
+
         <div className={styles.footer}>
-          {mine?.correct ? (
+          {mine?.playlist?.ownSong ? (
+            <span className={[styles.result, styles.own].join(' ')}>
+              +{mine.points} · {t('playlist.reveal.ownSong')}
+            </span>
+          ) : mine?.correct ? (
             <span className={[styles.result, styles.found].join(' ')}>
               +{mine.points} ·{' '}
               {mine.tier !== null
@@ -132,6 +139,81 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Playlist : qui a choisi la chanson (ou tirée au hasard), combien l'ont trouvée,
+ * points de qui l'a choisie, bonus et pari du joueur.
+ */
+function PlaylistBanner({ reveal, you }: { reveal: RoundReveal; you: string }) {
+  const { t } = useI18n();
+  const playlist = reveal.playlist!;
+  const mine = reveal.results.find((result) => result.playerId === you);
+  const myGuess = playlist.guesses.find((guess) => guess.playerId === you);
+  const pseudoOf = (id: string) =>
+    reveal.players.find((player) => player.id === id)?.pseudo ??
+    playlist.choosers.find((chooser) => chooser.id === id)?.pseudo ??
+    '?';
+
+  const { found, answerers: total } = playlist;
+  let foundText = t('playlist.reveal.foundMany', { found, total });
+  if (found === 0) foundText = t('playlist.reveal.foundNone', { total });
+  else if (found === 1) foundText = t('playlist.reveal.foundOne', { total });
+
+  const chosen = playlist.choosers.length > 0;
+  const first = playlist.choosers[0];
+  return (
+    <div className={styles.playlist}>
+      <div className={[styles.chooser, chosen ? '' : styles.random].join(' ')}>
+        {first ? (
+          <span
+            className={styles.chooserAvatar}
+            style={{ background: avatarColor(first.id) }}
+            aria-hidden="true"
+          >
+            {first.pseudo.charAt(0).toUpperCase()}
+          </span>
+        ) : null}
+        <span className={styles.chooserText}>
+          <span className={styles.chooserName}>
+            {chosen
+              ? t('playlist.reveal.chosenBy', {
+                  names: playlist.choosers.map((c) => c.pseudo).join(t('playlist.and')),
+                })
+              : t('playlist.reveal.random')}
+          </span>
+          <span className={styles.chooserFound}>{foundText}</span>
+        </span>
+        {chosen && playlist.chooserPoints > 0 ? (
+          <span className={styles.chooserPoints}>
+            <span className={styles.chooserPointsValue}>+{playlist.chooserPoints}</span>
+            <span className={styles.chooserPointsDetail}>
+              {t('playlist.reveal.chooserPoints', { n: total - found })}
+            </span>
+          </span>
+        ) : null}
+      </div>
+
+      {mine?.playlist && !mine.playlist.ownSong && mine.correct ? (
+        <div className={styles.playlistBonuses}>
+          {mine.playlist.foundBonus > 0 ? (
+            <span className={styles.playlistBonus}>
+              {t('playlist.bonus.found')} +{mine.playlist.foundBonus}
+            </span>
+          ) : null}
+          {myGuess ? (
+            <span
+              className={[styles.playlistBonus, myGuess.correct ? '' : styles.guessWrong].join(' ')}
+            >
+              {t(myGuess.correct ? 'playlist.reveal.guessRight' : 'playlist.reveal.guessWrong', {
+                name: myGuess.guess === null ? t('playlist.guess.nobody') : pseudoOf(myGuess.guess),
+              })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,13 @@
-import type { GameSettings, RoomError, RoomResponse, RoomState } from '@blindtest/shared';
+import type {
+  GameSettings,
+  PickedSong,
+  PlaylistPickResponse,
+  PlaylistPreview,
+  PlaylistSong,
+  RoomError,
+  RoomResponse,
+  RoomState,
+} from '@blindtest/shared';
 import { syncClock } from '../lib/clock';
 import { storage, STORAGE_KEYS } from '../lib/storage';
 import { ensureConnected, socket } from '../lib/socket';
@@ -97,6 +106,56 @@ export class RoomSession {
     this.state.game?.setVolume(volume);
   }
 
+  get currentVolume(): number {
+    return this.volume;
+  }
+
+  // ─── Playlist : phase de choix ────────────────────────────────────────────
+
+  /** Chansons d'un anime (jetons opaques), `null` en cas d'échec. */
+  async songsFor(animeId: number): Promise<PlaylistSong[] | null> {
+    const response = await socket
+      .timeout(8000)
+      .emitWithAck('playlist:songs', { animeId })
+      .catch(() => null);
+    return response?.ok ? response.songs : null;
+  }
+
+  pick(token: string): Promise<PlaylistPickResponse | null> {
+    return this.changePicks('playlist:pick', token);
+  }
+
+  unpick(token: string): Promise<PlaylistPickResponse | null> {
+    return this.changePicks('playlist:unpick', token);
+  }
+
+  /** Aperçu de 5 s (audio opaque). */
+  preview(token: string): Promise<PlaylistPreview | null> {
+    return socket
+      .timeout(8000)
+      .emitWithAck('playlist:preview', { token })
+      .catch(() => null);
+  }
+
+  private async changePicks(
+    event: 'playlist:pick' | 'playlist:unpick',
+    token: string,
+  ): Promise<PlaylistPickResponse | null> {
+    const response = await socket
+      .timeout(8000)
+      .emitWithAck(event, { token })
+      .catch(() => null);
+    if (response?.ok) this.setMine(response.mine);
+    return response;
+  }
+
+  /** Sa playlist à jour tout de suite (l'état de la room suit). */
+  private setMine(mine: PickedSong[]): void {
+    const { room } = this.state;
+    if (!room.picking) return;
+    this.update({ room: { ...room, picking: { ...room.picking, mine } } });
+  }
+
   /** Après les résultats : retour au salon. */
   backToLobby(): void {
     if (this.state.game?.getState().status !== 'ended') return;
@@ -131,6 +190,10 @@ export class RoomSession {
       game.attach(room.you);
     } else if (room.status === 'lobby' && game && current !== 'ended') {
       // Partie arrêtée sans fin normale (plus personne…) : retour au salon.
+      game.dispose();
+      game = null;
+    } else if (room.status === 'picking' && game) {
+      // Playlist relancée pendant qu'on regardait les résultats : place au choix des chansons.
       game.dispose();
       game = null;
     }

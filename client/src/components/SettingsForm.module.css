@@ -26,8 +26,18 @@
 
 .modes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-3);
+}
+
+.note {
+  margin: calc(var(--space-3) * -1) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .mode {

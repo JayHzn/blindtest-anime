@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { sanitizeSettings, type GameSettings, type StartGameError } from '@blindtest/shared';
+import {
+  sanitizeSettings,
+  type GameSettings,
+  type PlaylistRound,
+  type StartGameError,
+} from '@blindtest/shared';
 import type { Catalogue } from '../catalogue/Catalogue';
+import type { ThemeRow } from '../catalogue/types';
 import type { MediaRegistry } from '../media/MediaRegistry';
 import { Game, type GameEmitter } from './Game';
 
@@ -18,6 +24,10 @@ export interface CreateGameOptions {
   introMs?: number;
   /** Attente maximale des retardataires (room : 3 s). */
   audioWaitMs?: number;
+  /** Playlist : manches imposées (chansons choisies et complément), dans l'ordre de jeu. */
+  playlist?: PlaylistRound[];
+  /** Joueurs ajoutés à la partie mais déconnectés (ils retrouvent leur place en revenant). */
+  offline?: string[];
 }
 
 /** Parties en cours (solo et rooms) et rattachement joueur → partie. */
@@ -38,13 +48,32 @@ export class GameManager {
     onFinished,
     introMs,
     audioWaitMs,
+    playlist,
+    offline = [],
   }: CreateGameOptions): CreateGameResult {
     if (!this.catalogue) return { ok: false, error: 'catalogue_unavailable' };
     const settings: GameSettings | null = sanitizeSettings(rawSettings);
     if (!settings) return { ok: false, error: 'invalid_settings' };
+    // La Playlist ne se joue qu'en room, avec les chansons choisies.
+    if ((settings.mode === 'playlist') !== Boolean(playlist)) {
+      return { ok: false, error: 'invalid_settings' };
+    }
 
-    const themes = this.catalogue.pickThemes(settings.filters, settings.rounds + SPARE_THEMES);
-    if (themes.length === 0) return { ok: false, error: 'not_enough_themes' };
+    let themes: ThemeRow[];
+    let choosers: string[][] | undefined;
+    if (playlist) {
+      const rounds = playlist.filter((round) => this.catalogue!.getTheme(round.themeId));
+      themes = rounds.map((round) => this.catalogue!.getTheme(round.themeId)!);
+      choosers = rounds.map((round) => round.choosers);
+      // Remplaçantes (audio injouable) : tirées avec les filtres de la room, hors séries déjà jouées.
+      const used = new Set(themes.map((theme) => this.catalogue!.franchiseOfTheme(theme.id)!));
+      themes.push(...this.catalogue.pickThemes(settings.filters, SPARE_THEMES, Math.random, used));
+    } else {
+      themes = this.catalogue.pickThemes(settings.filters, settings.rounds + SPARE_THEMES);
+    }
+    if (themes.length === 0 || choosers?.length === 0) {
+      return { ok: false, error: 'not_enough_themes' };
+    }
 
     const game = new Game({
       id: randomUUID(),
@@ -53,6 +82,7 @@ export class GameManager {
       media: this.media,
       emitter: this.emitter,
       themes,
+      choosers,
       introMs,
       audioWaitMs,
       onFinished: (finished) => {
@@ -65,6 +95,7 @@ export class GameManager {
       game.addPlayer(player.id, player.pseudo);
       this.gameOfPlayer.set(player.id, game.id);
     }
+    for (const id of offline) game.disconnect(id);
     this.games.set(game.id, game);
     return { ok: true, game };
   }

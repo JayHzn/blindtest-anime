@@ -14,6 +14,7 @@ import { storage, STORAGE_KEYS } from './lib/storage';
 import { Game } from './pages/Game';
 import { Home } from './pages/Home';
 import { Lobby } from './pages/Lobby';
+import { Picking } from './pages/Picking';
 import { Results } from './pages/Results';
 import { Setup } from './pages/Setup';
 
@@ -213,7 +214,7 @@ interface RoomFlowProps {
 /** Room : salon, partie lancée par l'hôte, résultats, retour au salon. */
 function RoomFlow({ room, volume, onVolumeChange, onLeave, onClosed }: RoomFlowProps) {
   const { t } = useI18n();
-  const { game, closed } = useSyncExternalStore(room.subscribe, room.getState);
+  const { game, closed, room: roomState } = useSyncExternalStore(room.subscribe, room.getState);
 
   if (closed) {
     return (
@@ -237,6 +238,7 @@ function RoomFlow({ room, volume, onVolumeChange, onLeave, onClosed }: RoomFlowP
       />
     );
   }
+  if (roomState.status === 'picking') return <Picking session={room} onLeave={onLeave} />;
   return <Lobby session={room} onLeave={onLeave} />;
 }
 

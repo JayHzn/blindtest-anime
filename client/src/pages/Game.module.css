@@ -218,6 +218,211 @@
   color: var(--color-lavender);
 }
 
+/* ─── Playlist ──────────────────────────────────────────────────────────── */
+
+.foundCount {
+  margin: var(--space-1) 0 0;
+  align-self: center;
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.guess {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  animation: pop 0.4s var(--ease-out);
+}
+
+.guessTitle {
+  font-size: 22px;
+}
+
+.guessHint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.guessOptions {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.guessOption {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 18px 6px 6px;
+  border: 2px solid var(--color-surface-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.guessNobody {
+  padding-left: 18px;
+  color: var(--color-text-muted);
+}
+
+.guessAvatar {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-bg);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.guessDone {
+  margin: 0;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  background: rgb(185 166 255 / 0.16);
+  color: var(--color-lavender);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.ownSong {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+
+.ownBadge {
+  padding: 6px 18px;
+  border-radius: var(--radius-pill);
+  background: rgb(255 213 138 / 0.16);
+  color: var(--color-peach);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.ownTitle {
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 700;
+  animation: pop 0.5s var(--ease-out);
+}
+
+.ownText {
+  margin: 0;
+  max-width: 520px;
+  color: var(--color-text-muted);
+  font-size: 18px;
+}
+
+.watchList {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+
+.watchItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 14px 8px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  text-align: left;
+}
+
+.watchFound {
+  background: rgb(143 240 200 / 0.1);
+}
+
+.watchOffline {
+  opacity: 0.5;
+}
+
+.watchName {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchState {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.watchFound .watchState {
+  color: var(--color-mint);
+}
+
+.potential {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  text-align: left;
+}
+
+.potentialPoints {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--color-peach);
+}
+
+.potentialText {
+  color: var(--color-text-muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ownSecret {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .guessOption:hover {
+    border-color: var(--color-accent);
+    background: var(--color-surface-hover);
+  }
+}
+
 @keyframes pop {
   from {
     opacity: 0;

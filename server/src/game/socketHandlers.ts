@@ -80,6 +80,16 @@ export function registerSocketHandlers(socket: GameSocket, { games, rooms }: Man
     ack(games.gameOf(playerId)?.giveUp(playerId) ?? null);
   });
 
+  socket.on('game:guess', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    const target = payload?.target;
+    if (target !== null && (typeof target !== 'string' || target.length > 100)) {
+      ack(false);
+      return;
+    }
+    ack(games.gameOf(playerId)?.guess(playerId, target) ?? false);
+  });
+
   socket.on('audio:ready', (payload) => {
     const report = sanitizeAudioReport(payload);
     if (report) games.gameOf(playerId)?.audioReady(playerId, report.round, report.url);
@@ -110,6 +120,28 @@ export function registerSocketHandlers(socket: GameSocket, { games, rooms }: Man
   socket.on('room:start', (ack) => {
     if (typeof ack !== 'function') return;
     ack(rooms.start(playerId));
+  });
+
+  // ─── Playlist : phase de choix ────────────────────────────────────────────
+
+  socket.on('playlist:songs', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    ack(rooms.songs(playerId, payload?.animeId));
+  });
+
+  socket.on('playlist:pick', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    ack(rooms.pick(playerId, payload?.token));
+  });
+
+  socket.on('playlist:unpick', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    ack(rooms.unpick(playerId, payload?.token));
+  });
+
+  socket.on('playlist:preview', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    ack(rooms.preview(playerId, payload?.token));
   });
 
   // ─── Déconnexion ──────────────────────────────────────────────────────────

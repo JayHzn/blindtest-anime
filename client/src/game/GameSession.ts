@@ -36,6 +36,25 @@ export type AnswerFeedback =
       sequenceExact: boolean;
     };
 
+/** Mode Playlist : ce que le joueur sait de la manche en cours. */
+export interface PlaylistState {
+  /** Il a choisi cette chanson : il écoute sans répondre. */
+  ownSong: boolean;
+  /** Nombre anonyme de joueurs qui ont trouvé. */
+  found: number;
+  /** Son pari (`null` : personne, tirée au hasard ; `undefined` : pas encore parié). */
+  guess: string | null | undefined;
+  /** Tout le monde a trouvé : fin de la fenêtre pour deviner. */
+  guessWindowEndsAt: number | null;
+}
+
+const NO_PLAYLIST: PlaylistState = {
+  ownSong: false,
+  found: 0,
+  guess: undefined,
+  guessWindowEndsAt: null,
+};
+
 export interface SessionState {
   /** Partie solo, ou partie d'une room (écran d'intro au lancement). */
   kind: 'solo' | 'room';
@@ -56,6 +75,8 @@ export interface SessionState {
   progress: TierProgress;
   /** Un extrait est en cours de lecture (mode Progressif). */
   snippetPlaying: boolean;
+  /** Mode Playlist : rôle, compteur, pari. */
+  playlist: PlaylistState;
   /** Le navigateur a bloqué le son (pas de clic depuis le chargement de la page). */
   soundBlocked: boolean;
   end: GameEnd | null;
@@ -106,6 +127,7 @@ export class GameSession {
       answer: { status: 'idle', wrongCount: 0 },
       progress: INITIAL_PROGRESS,
       snippetPlaying: false,
+      playlist: NO_PLAYLIST,
       soundBlocked: false,
       end: null,
       previousBest: null,
@@ -115,9 +137,15 @@ export class GameSession {
       'game:state': (snapshot) => this.onSnapshot(snapshot),
       'round:prepare': (audio) => this.onPrepare(audio),
       'round:countdown': ({ round, phaseEndsAt }) => this.onCountdown(round, phaseEndsAt),
-      'round:start': ({ round, startedAt, phaseEndsAt, videoUrl }) =>
-        this.onStart(round, startedAt, phaseEndsAt, videoUrl),
+      'round:start': ({ round, startedAt, phaseEndsAt, videoUrl, ownSong }) =>
+        this.onStart(round, startedAt, phaseEndsAt, videoUrl, ownSong ?? false),
       'player:found': ({ players }) => this.update({ players }),
+      'playlist:found': ({ found }) => this.update({ playlist: { ...this.state.playlist, found } }),
+      'playlist:guessWindow': ({ endsAt }) =>
+        this.update({
+          phaseEndsAt: endsAt,
+          playlist: { ...this.state.playlist, guessWindowEndsAt: endsAt },
+        }),
       'game:players': (players) => this.update({ players }),
       'round:reveal': (reveal) => this.onReveal(reveal),
       'game:end': (end) => this.onEnd(end),
@@ -257,11 +285,30 @@ export class GameSession {
     });
   }
 
+  /**
+   * Playlist : « Devine qui l'a choisie », une fois la chanson trouvée.
+   * Un seul pari ; `null` = personne (chanson tirée au hasard).
+   */
+  async guess(target: string | null): Promise<void> {
+    const { phase, answer, playlist, round } = this.state;
+    if (phase !== 'listening' || answer.status !== 'correct' || playlist.guess !== undefined)
+      return;
+    this.update({ playlist: { ...playlist, guess: target } });
+    const ok = await socket
+      .timeout(5000)
+      .emitWithAck('game:guess', { target })
+      .catch(() => false);
+    if (!ok && !this.disposed && this.state.round === round && this.state.phase === 'listening') {
+      this.update({ playlist: { ...this.state.playlist, guess: undefined } });
+    }
+  }
+
   /** Clic sur « Activer le son » : le navigateur autorise désormais la lecture. */
   enableSound(): void {
     unlockSfx();
     this.update({ soundBlocked: false });
-    if (this.state.phase !== 'listening' || !this.canAnswer()) return;
+    const listens = this.canAnswer() || this.state.playlist.ownSong;
+    if (this.state.phase !== 'listening' || !listens) return;
     if (this.isProgressive) void this.playTier();
     else if (this.listenStart?.round === this.state.round) {
       this.audio.play(this.state.round, this.listenStart.startedAt);
@@ -311,6 +358,7 @@ export class GameSession {
       round: snapshot.round,
       phaseEndsAt: snapshot.phaseEndsAt,
       progress: snapshot.progress ?? INITIAL_PROGRESS,
+      playlist: snapshot.playlist ?? NO_PLAYLIST,
       // Déjà trouvé avant la coupure : on n'affiche plus le champ de réponse.
       answer: found
         ? { status: 'correct', wrongCount: 0, points: 0, seasonExact: false, sequenceExact: false }
@@ -333,6 +381,9 @@ export class GameSession {
       answer: { status: 'idle', wrongCount: 0 },
       progress: INITIAL_PROGRESS,
       snippetPlaying: false,
+      playlist: NO_PLAYLIST,
+      // Nouvelle manche : les coches « a trouvé » de la précédente disparaissent.
+      players: this.state.players.map((player) => ({ ...player, found: false })),
     });
     // Cloche « attention », puis un tic à chaque seconde restante.
     sfx.bell();
@@ -349,9 +400,15 @@ export class GameSession {
     startedAt: number,
     phaseEndsAt: number,
     videoUrl: string | null,
+    ownSong: boolean,
   ): void {
     this.clearTicks();
-    this.update({ phase: 'listening', round, phaseEndsAt });
+    this.update({
+      phase: 'listening',
+      round,
+      phaseEndsAt,
+      playlist: { ...this.state.playlist, ownSong },
+    });
     const startTime = this.audio.startTime(round) ?? 0;
     if (this.isProgressive) {
       // Premier palier joué automatiquement ; la vidéo se précharge au début de l'extrait.
@@ -407,9 +464,10 @@ export class GameSession {
     return this.state.settings.mode === 'progressive';
   }
 
-  /** Le joueur peut encore répondre (pas trouvé, pas éliminé, pas abandonné). */
+  /** Le joueur peut encore répondre (pas trouvé, pas éliminé, pas abandonné, pas sa chanson). */
   private canAnswer(): boolean {
     const { status } = this.state.answer;
+    if (this.state.playlist.ownSong) return false;
     return status !== 'correct' && status !== 'eliminated' && status !== 'gaveUp';
   }
 

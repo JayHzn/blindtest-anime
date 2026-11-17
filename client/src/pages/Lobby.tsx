@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { ROOM_MAX_PLAYERS, type GameSettings } from '@blindtest/shared';
+import { PLAYLIST, ROOM_MAX_PLAYERS, ROOM_MODES, type GameSettings } from '@blindtest/shared';
 import { AppHeader } from '../components/AppHeader';
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { SettingsForm } from '../components/SettingsForm';
@@ -29,6 +29,9 @@ export function Lobby({ session, onLeave }: LobbyProps) {
     (member) => member.connected && !member.isHost && !member.ready,
   );
   const { count, message } = useThemeCountMessage(room.settings);
+  const connected = room.members.filter((member) => member.connected).length;
+  const missingPlayers =
+    room.settings.mode === 'playlist' ? Math.max(0, PLAYLIST.minPlayers - connected) : 0;
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +128,12 @@ export function Lobby({ session, onLeave }: LobbyProps) {
             <h2 className={styles.heading}>{t('room.settings')}</h2>
             {isHost ? null : <span className={styles.hint}>{t('room.settings.hostOnly')}</span>}
           </div>
-          <SettingsForm settings={room.settings} onChange={changeSettings} disabled={!isHost} />
+          <SettingsForm
+            settings={room.settings}
+            onChange={changeSettings}
+            disabled={!isHost}
+            modes={ROOM_MODES}
+          />
 
           <div className={styles.footer}>
             <p className={styles.count} aria-live="polite">
@@ -140,11 +148,16 @@ export function Lobby({ session, onLeave }: LobbyProps) {
               <>
                 <Button
                   size="lg"
-                  disabled={starting || count === 0 || notReady.length > 0}
+                  disabled={starting || count === 0 || notReady.length > 0 || missingPlayers > 0}
                   onClick={() => void start()}
                 >
                   {starting ? t('setup.starting') : t('room.start')}
                 </Button>
+                {missingPlayers > 0 ? (
+                  <p className={styles.hint}>
+                    {t('room.playlist.minPlayers', { n: PLAYLIST.minPlayers })}
+                  </p>
+                ) : null}
                 {notReady.length > 0 ? (
                   <p className={styles.hint}>
                     {t('room.waitingPlayers', { names: notReady.map((m) => m.pseudo).join(', ') })}

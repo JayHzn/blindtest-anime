@@ -1,20 +1,29 @@
 import {
   DEFAULT_SETTINGS,
+  PLAYLIST,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   ROOM_AUDIO_WAIT_MS,
   ROOM_INTRO_MS,
   ROOM_MAX_PLAYERS,
+  drawPlaylist,
   normalizeRoomCode,
   sanitizePseudo,
   sanitizeSettings,
   type GameSettings,
+  type PlaylistPick,
+  type PlaylistPickResponse,
+  type PlaylistPreview,
+  type PlaylistSongsResponse,
   type RoomError,
   type RoomResponse,
   type RoomState,
 } from '@blindtest/shared';
+import type { Catalogue } from '../catalogue/Catalogue';
 import type { Game, GameEmitter } from '../game/Game';
 import type { GameManager } from '../game/GameManager';
+import type { MediaRegistry } from '../media/MediaRegistry';
+import { PlaylistPicking } from './PlaylistPicking';
 
 /** Une room sans joueur connecté est supprimée au bout de ce délai. */
 export const EMPTY_ROOM_TTL_MS = 10 * 60 * 1000;
@@ -34,11 +43,19 @@ interface Room {
   members: Map<string, Member>;
   settings: GameSettings;
   game: Game | null;
+  /** Playlist : phase de choix des chansons, avant la partie. */
+  picking: PlaylistPicking | null;
   /** Depuis quand plus aucun membre n'est connecté (null si quelqu'un l'est). */
   emptySince: number | null;
 }
 
 export type StartRoomResult = { ok: true } | { ok: false; error: RoomError };
+
+/** Dépendances du mode Playlist (catalogue pour les chansons, proxy audio pour l'aperçu). */
+export interface PlaylistDeps {
+  catalogue: Catalogue | null;
+  media: MediaRegistry;
+}
 
 /** Rooms en mémoire : membres, hôte, réglages et partie en cours. */
 export class RoomManager {
@@ -49,6 +66,7 @@ export class RoomManager {
     private readonly games: GameManager,
     private readonly emitter: GameEmitter,
     private readonly random: () => number = Math.random,
+    private readonly playlist: PlaylistDeps | null = null,
   ) {}
 
   create(playerId: string, rawPseudo: unknown): RoomResponse {
@@ -59,6 +77,7 @@ export class RoomManager {
       members: new Map(),
       settings: DEFAULT_SETTINGS,
       game: null,
+      picking: null,
       emptySince: null,
     };
     room.members.set(playerId, {
@@ -106,12 +125,15 @@ export class RoomManager {
     this.roomOfPlayer.delete(playerId);
     room.members.delete(playerId);
     if (room.game) this.games.leave(playerId);
+    // Départ pendant la phase de choix : ses chansons sont retirées.
+    room.picking?.removePlayer(playerId);
     if (room.members.size === 0) {
       this.delete(room);
       return;
     }
     if (room.hostId === playerId) this.transferHost(room);
     this.refreshEmptiness(room);
+    room.picking?.refresh(this.connectedIds(room));
     this.broadcast(room);
   }
 
@@ -127,6 +149,7 @@ export class RoomManager {
     // Un hôte déconnecté passe la main pour ne pas bloquer les autres.
     if (room.hostId === playerId) this.transferHost(room);
     this.refreshEmptiness(room);
+    room.picking?.refresh(this.connectedIds(room));
     this.broadcast(room);
   }
 
@@ -139,8 +162,11 @@ export class RoomManager {
     room.emptySince = null;
     if (!room.members.get(room.hostId)?.connected) room.hostId = playerId;
     const notify = () => {
+      room.picking?.refresh(this.connectedIds(room));
       this.broadcast(room);
-      if (room.game) this.games.reconnect(playerId);
+      // Rejoint la partie s'il n'y était pas (déconnecté au lancement), sinon reprend sa place.
+      const game = room.game;
+      if (game && !game.isClosed) this.games.join(game, playerId, member.pseudo);
     };
     if (deferNotify) setImmediate(notify);
     else notify();
@@ -156,7 +182,7 @@ export class RoomManager {
 
   updateSettings(playerId: string, rawSettings: unknown): void {
     const room = this.roomOf(playerId);
-    if (!room || room.hostId !== playerId || room.game) return;
+    if (!room || room.hostId !== playerId || room.game || room.picking) return;
     const settings = sanitizeSettings(rawSettings);
     if (!settings) return;
     room.settings = settings;
@@ -168,7 +194,7 @@ export class RoomManager {
     const room = this.roomOf(playerId);
     if (!room) return { ok: false, error: 'not_in_room' };
     if (room.hostId !== playerId) return { ok: false, error: 'not_host' };
-    if (room.game) return { ok: false, error: 'already_playing' };
+    if (room.game || room.picking) return { ok: false, error: 'already_playing' };
 
     // L'hôte est prêt en cliquant « Lancer » ; les autres doivent l'avoir indiqué.
     const host = room.members.get(playerId)!;
@@ -178,11 +204,22 @@ export class RoomManager {
       this.broadcast(room);
       return { ok: false, error: 'players_not_ready' };
     }
+    if (room.settings.mode === 'playlist') return this.startPicking(room, players.length);
+    return this.launch(room, players, {});
+  }
+
+  /** Lance la partie (après la phase de choix en Playlist). */
+  private launch(
+    room: Room,
+    players: Member[],
+    extra: { playlist?: ReturnType<typeof drawPlaylist>; offline?: string[] },
+  ): StartRoomResult {
     const result = this.games.create({
       players,
       settings: room.settings,
       introMs: ROOM_INTRO_MS,
       audioWaitMs: ROOM_AUDIO_WAIT_MS,
+      ...extra,
       onFinished: (game) => {
         if (room.game !== game) return;
         room.game = null;
@@ -196,6 +233,93 @@ export class RoomManager {
     this.broadcast(room);
     result.game.start();
     return { ok: true };
+  }
+
+  // ─── Playlist : phase de choix ────────────────────────────────────────────
+
+  private startPicking(room: Room, connected: number): StartRoomResult {
+    if (connected < PLAYLIST.minPlayers) return { ok: false, error: 'not_enough_players' };
+    const deps = this.playlist;
+    if (!deps?.catalogue) return { ok: false, error: 'catalogue_unavailable' };
+    room.picking = new PlaylistPicking({
+      catalogue: deps.catalogue,
+      media: deps.media,
+      songsPerPlayer: room.settings.songsPerPlayer ?? PLAYLIST.songsDefault,
+      types: room.settings.filters.types,
+      onDone: () => this.finishPicking(room),
+    });
+    this.broadcast(room);
+    return { ok: true };
+  }
+
+  /**
+   * Fin de la phase de choix : les chansons manquantes sont tirées au hasard
+   * (filtres de la room, hors séries déjà choisies), puis la partie démarre.
+   */
+  private finishPicking(room: Room): void {
+    const picking = room.picking;
+    const catalogue = this.playlist?.catalogue;
+    if (!picking || !catalogue || this.rooms.get(room.code) !== room) return;
+    room.picking = null;
+
+    const members = [...room.members.values()];
+    const picks: PlaylistPick[] = picking.picks(members.map((member) => member.id));
+    const missing = members.reduce(
+      (sum, member) => sum + Math.max(0, picking.songsPerPlayer - picking.count(member.id)),
+      0,
+    );
+    const usedFranchises = new Set(picks.map((pick) => catalogue.franchiseOfTheme(pick.themeId)!));
+    for (const theme of catalogue.pickThemes(
+      room.settings.filters,
+      missing,
+      this.random,
+      usedFranchises,
+    )) {
+      picks.push({ playerId: null, themeId: theme.id });
+    }
+
+    const result = this.launch(room, members, {
+      playlist: drawPlaylist(picks, this.random),
+      offline: members.filter((member) => !member.connected).map((member) => member.id),
+    });
+    if (!result.ok) this.broadcast(room);
+  }
+
+  songs(playerId: string, animeId: unknown): PlaylistSongsResponse {
+    const songs =
+      typeof animeId === 'number' ? this.roomOf(playerId)?.picking?.songs(playerId, animeId) : null;
+    return songs ? { ok: true, songs } : { ok: false };
+  }
+
+  pick(playerId: string, token: unknown): PlaylistPickResponse {
+    return this.updatePicks(playerId, (picking) => picking.pick(playerId, token));
+  }
+
+  unpick(playerId: string, token: unknown): PlaylistPickResponse {
+    return this.updatePicks(playerId, (picking) => picking.unpick(playerId, token));
+  }
+
+  preview(playerId: string, token: unknown): PlaylistPreview | null {
+    return this.roomOf(playerId)?.picking?.preview(playerId, token) ?? null;
+  }
+
+  private updatePicks(
+    playerId: string,
+    change: (picking: PlaylistPicking) => PlaylistPickResponse,
+  ): PlaylistPickResponse {
+    const room = this.roomOf(playerId);
+    if (!room?.picking) return { ok: false, error: 'not_picking' };
+    const response = change(room.picking);
+    if (response.ok) {
+      room.picking.refresh(this.connectedIds(room));
+      // L'avancement (nombres seulement) change pour tout le monde.
+      this.broadcast(room);
+    }
+    return response;
+  }
+
+  private connectedIds(room: Room): string[] {
+    return [...room.members.values()].filter((member) => member.connected).map((m) => m.id);
   }
 
   roomCodeOf(playerId: string): string | null {
@@ -226,6 +350,8 @@ export class RoomManager {
 
   private delete(room: Room): void {
     room.game?.close();
+    room.picking?.close();
+    room.picking = null;
     this.rooms.delete(room.code);
     for (const id of room.members.keys()) {
       this.roomOfPlayer.delete(id);
@@ -252,7 +378,7 @@ export class RoomManager {
   }
 
   private stateFor(room: Room, playerId: string): RoomState {
-    return {
+    const state: RoomState = {
       code: room.code,
       you: playerId,
       hostId: room.hostId,
@@ -261,8 +387,12 @@ export class RoomManager {
         isHost: member.id === room.hostId,
       })),
       settings: room.settings,
-      status: room.game ? 'playing' : 'lobby',
+      status: 'lobby',
     };
+    if (room.picking) state.status = 'picking';
+    if (room.game) state.status = 'playing';
+    if (room.picking) state.picking = room.picking.stateFor(playerId, [...room.members.keys()]);
+    return state;
   }
 
   /** Deux « Sakura » dans la même room deviennent « Sakura » et « Sakura 2 ». */

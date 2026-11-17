@@ -1,4 +1,4 @@
-import { MODE_TIMINGS } from '@blindtest/shared';
+import { MODE_TIMINGS, PLAYLIST, chooserPoints } from '@blindtest/shared';
 import { AppHeader } from '../components/AppHeader';
 import { Vinyl } from '../components/Vinyl';
 import { AnswerForm } from '../components/game/AnswerForm';
@@ -156,12 +156,17 @@ function ListeningStage({ session, state, now }: ListeningStageProps) {
   const { t } = useI18n();
   const index = useTitleIndex();
   const progressive = state.settings.mode === 'progressive';
+  const playlist = state.settings.mode === 'playlist';
   const timing = MODE_TIMINGS[state.settings.mode];
   // Son temps est écoulé, mais un retardataire écoute encore : la révélation attend.
   const { answer } = state;
   const stillAnswering =
     answer.status !== 'correct' && answer.status !== 'eliminated' && answer.status !== 'gaveUp';
   const timeUp = stillAnswering && now > state.phaseEndsAt;
+  const guessWindow = playlist && state.playlist.guessWindowEndsAt !== null;
+  const durationMs = guessWindow ? PLAYLIST.guessWindowMs : timing.listenMs;
+
+  if (playlist && state.playlist.ownSong) return <OwnSongStage state={state} now={now} />;
 
   return (
     <div className={styles.listening}>
@@ -169,15 +174,20 @@ function ListeningStage({ session, state, now }: ListeningStageProps) {
       <Vinyl size={progressive ? 150 : 180} spinning={!progressive || state.snippetPlaying} />
       <div className={styles.timer}>
         <div className={styles.timerLabels}>
-          <span>{t('game.question')}</span>
+          <span>
+            {guessWindow
+              ? t('playlist.guess.window', { s: secondsLeft(state.phaseEndsAt, now) })
+              : t('game.question')}
+          </span>
           <span className={styles.seconds}>
             {t('game.seconds', {
               // Plafonné : un léger décalage d'horloge ne doit pas afficher « 16 s » sur 15.
-              s: Math.min(secondsLeft(state.phaseEndsAt, now), timing.listenMs / 1000),
+              s: Math.min(secondsLeft(state.phaseEndsAt, now), durationMs / 1000),
             })}
           </span>
         </div>
-        <TimerBar endsAt={state.phaseEndsAt} durationMs={timing.listenMs} />
+        <TimerBar endsAt={state.phaseEndsAt} durationMs={durationMs} />
+        {playlist ? <FoundCount found={state.playlist.found} /> : null}
       </div>
 
       {progressive && stillAnswering && !timeUp ? (
@@ -204,6 +214,10 @@ function ListeningStage({ session, state, now }: ListeningStageProps) {
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {playlist && answer.status === 'correct' ? (
+        <GuessPanel session={session} state={state} />
       ) : null}
 
       {answer.status === 'eliminated' ? (
@@ -241,6 +255,140 @@ function ListeningStage({ session, state, now }: ListeningStageProps) {
           </p>
         </>
       ) : null}
+    </div>
+  );
+}
+
+/** Playlist : nombre anonyme de joueurs qui ont trouvé (jamais qui). */
+function FoundCount({ found }: { found: number }) {
+  const { t } = useI18n();
+  let text = t('playlist.found.many', { n: found });
+  if (found === 0) text = t('playlist.found.none');
+  else if (found === 1) text = t('playlist.found.one');
+  return (
+    <p className={styles.foundCount} aria-live="polite">
+      {text}
+    </p>
+  );
+}
+
+/** Playlist : « Devine qui l'a choisie », proposé dès qu'on a trouvé. Un seul pari. */
+function GuessPanel({ session, state }: { session: GameSession; state: SessionState }) {
+  const { t } = useI18n();
+  const { guess } = state.playlist;
+  const candidates = state.players.filter((player) => player.id !== state.you);
+
+  if (guess !== undefined) {
+    const name =
+      guess === null
+        ? t('playlist.guess.nobody')
+        : (state.players.find((player) => player.id === guess)?.pseudo ?? '?');
+    return (
+      <p className={styles.guessDone} role="status">
+        {t('playlist.guess.yours', { name })}
+      </p>
+    );
+  }
+  return (
+    <section className={styles.guess} aria-label={t('playlist.guess.title')}>
+      <h2 className={styles.guessTitle}>{t('playlist.guess.title')}</h2>
+      <p className={styles.guessHint}>{t('playlist.guess.hint')}</p>
+      <div className={styles.guessOptions}>
+        {candidates.map((player) => (
+          <button
+            key={player.id}
+            type="button"
+            className={styles.guessOption}
+            onClick={() => void session.guess(player.id)}
+          >
+            <span
+              className={styles.guessAvatar}
+              style={{ background: avatarColor(player.id) }}
+              aria-hidden="true"
+            >
+              {player.pseudo.charAt(0).toUpperCase()}
+            </span>
+            {player.pseudo}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={[styles.guessOption, styles.guessNobody].join(' ')}
+          onClick={() => void session.guess(null)}
+        >
+          {t('playlist.guess.nobody')}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Playlist : écran de qui a choisi la chanson. Il écoute sans répondre et voit
+ * en direct qui la trouve (lui seul reçoit cette information).
+ */
+function OwnSongStage({ state, now }: { state: SessionState; now: number }) {
+  const { t } = useI18n();
+  const timing = MODE_TIMINGS.playlist;
+  const others = state.players.filter((player) => player.id !== state.you);
+  const answerers = others.filter((player) => player.connected || player.found);
+  const found = answerers.filter((player) => player.found).length;
+  const potential = chooserPoints(answerers.length, found);
+  const guessWindow = state.playlist.guessWindowEndsAt !== null;
+  const durationMs = guessWindow ? PLAYLIST.guessWindowMs : timing.listenMs;
+
+  return (
+    <div className={styles.ownSong}>
+      <span className={styles.ownBadge}>{t('playlist.ownSong.badge')}</span>
+      <h1 className={styles.ownTitle}>{t('playlist.ownSong.title')}</h1>
+      <p className={styles.ownText}>{t('playlist.ownSong.text')}</p>
+
+      <div className={styles.timer}>
+        <div className={styles.timerLabels}>
+          <span>{t('playlist.ownSong.listening')}</span>
+          <span className={styles.seconds}>
+            {t('game.seconds', {
+              s: Math.min(secondsLeft(state.phaseEndsAt, now), durationMs / 1000),
+            })}
+          </span>
+        </div>
+        <TimerBar endsAt={state.phaseEndsAt} durationMs={durationMs} />
+      </div>
+
+      <ul className={styles.watchList}>
+        {others.map((player) => (
+          <li
+            key={player.id}
+            className={[
+              styles.watchItem,
+              player.found ? styles.watchFound : '',
+              player.connected ? '' : styles.watchOffline,
+            ].join(' ')}
+          >
+            <span
+              className={styles.guessAvatar}
+              style={{ background: avatarColor(player.id) }}
+              aria-hidden="true"
+            >
+              {player.pseudo.charAt(0).toUpperCase()}
+            </span>
+            <span className={styles.watchName}>{player.pseudo}</span>
+            <span className={styles.watchState}>
+              {player.found ? t('playlist.ownSong.found') : t('playlist.ownSong.searching')}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <div className={styles.potential}>
+        <span className={styles.potentialPoints}>+{potential}</span>
+        <span className={styles.potentialText}>
+          {potential > 0
+            ? t('playlist.ownSong.points', { n: answerers.length - found })
+            : t('playlist.ownSong.rule')}
+        </span>
+      </div>
+      <p className={styles.ownSecret}>{t('playlist.ownSong.secret')}</p>
     </div>
   );
 }

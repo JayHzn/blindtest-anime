@@ -19,6 +19,7 @@ import type {
   StartGameError,
   TierProgress,
 } from './game';
+import type { PlaylistPickResponse, PlaylistPreview, PlaylistSongsResponse } from './playlist';
 import type { RoomError, RoomResponse, RoomState } from './room';
 
 export type StartGameResponse =
@@ -43,11 +44,20 @@ export interface ServerToClientEvents {
     startedAt: number;
     phaseEndsAt: number;
     videoUrl: string | null;
+    /** Playlist : le joueur a choisi cette chanson (il écoute sans répondre). */
+    ownSong?: boolean;
   }) => void;
   /** Liste des joueurs mise à jour (arrivée, départ, déconnexion, retour). */
   'game:players': (players: PlayerScore[]) => void;
-  /** Un joueur a trouvé (sans révéler la réponse). */
+  /**
+   * Un joueur a trouvé (sans révéler la réponse).
+   * En Playlist, seuls les joueurs qui ont choisi la chanson le reçoivent.
+   */
   'player:found': (payload: { playerId: string; players: PlayerScore[] }) => void;
+  /** Playlist : nombre anonyme de joueurs qui ont trouvé. */
+  'playlist:found': (payload: { found: number }) => void;
+  /** Playlist : tout le monde a trouvé, il reste jusqu'à `endsAt` pour deviner qui a choisi la chanson. */
+  'playlist:guessWindow': (payload: { endsAt: number }) => void;
   /** Fin de la manche : réponse et résultats. */
   'round:reveal': (reveal: RoundReveal) => void;
   /** Fin de la partie. */
@@ -95,4 +105,27 @@ export interface ClientToServerEvents {
   'room:settings': (settings: GameSettings) => void;
   /** L'hôte lance la partie pour tous les joueurs connectés. */
   'room:start': (ack: (response: { ok: true } | { ok: false; error: RoomError }) => void) => void;
+
+  /** Playlist : chansons d'un anime pour la phase de choix (jetons opaques). */
+  'playlist:songs': (
+    payload: { animeId: number },
+    ack: (response: PlaylistSongsResponse) => void,
+  ) => void;
+  /** Playlist : ajoute une chanson à sa playlist. */
+  'playlist:pick': (
+    payload: { token: string },
+    ack: (response: PlaylistPickResponse) => void,
+  ) => void;
+  /** Playlist : retire une chanson de sa playlist. */
+  'playlist:unpick': (
+    payload: { token: string },
+    ack: (response: PlaylistPickResponse) => void,
+  ) => void;
+  /** Playlist : aperçu de 5 s d'une chanson (audio opaque). */
+  'playlist:preview': (
+    payload: { token: string },
+    ack: (preview: PlaylistPreview | null) => void,
+  ) => void;
+  /** Playlist : « Devine qui l'a choisie » (`null` : personne, tirée au hasard). Un seul pari. */
+  'game:guess': (payload: { target: string | null }, ack: (ok: boolean) => void) => void;
 }

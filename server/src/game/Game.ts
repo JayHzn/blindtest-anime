@@ -3,8 +3,10 @@ import {
   BONUS_POINTS,
   MODE_TIMINGS,
   INITIAL_PROGRESS,
+  PLAYLIST,
   PROGRESSIVE,
   PROGRESSIVE_LAST_TIER,
+  chooserPoints,
   classicPoints,
   type AnswerPayload,
   type AnswerResult,
@@ -15,6 +17,8 @@ import {
   type ModeTiming,
   type PlayerRoundResult,
   type PlayerScore,
+  type PlaylistReveal,
+  type PlaylistRoundView,
   type RoundAudio,
   type RoundReveal,
   type ServerToClientEvents,
@@ -74,6 +78,12 @@ interface RoundState {
   results: Map<string, PlayerRoundResult>;
   /** Mode Progressif : palier et essais de chaque joueur. */
   progress: Map<string, TierProgress>;
+  /** Playlist : joueurs qui ont choisi la chanson (vide : tirée au hasard). Ils ne répondent pas. */
+  choosers: string[];
+  /** Playlist : paris « Devine qui l'a choisie » (`null` : personne). */
+  guesses: Map<string, string | null>;
+  /** Playlist : fin de la fenêtre pour deviner, ouverte quand tout le monde a trouvé. */
+  guessWindowEndsAt: number | null;
 }
 
 export interface GameOptions {
@@ -84,6 +94,11 @@ export interface GameOptions {
   emitter: GameEmitter;
   /** Musiques tirées : les premières sont jouées, le reste sert de remplaçantes. */
   themes: ThemeRow[];
+  /**
+   * Playlist : joueurs qui ont choisi chaque manche (aligné sur `themes`). Fixe le
+   * nombre de manches ; les musiques suivantes servent de remplaçantes.
+   */
+  choosers?: string[][];
   random?: () => number;
   onFinished?: (game: Game) => void;
   /** Durée du compte à rebours de la première manche (écran d'intro en room). */
@@ -111,6 +126,8 @@ export class Game {
   private readonly audioWaitMs: number;
 
   private readonly players = new Map<string, PlayerState>();
+  /** Pseudos de tous les joueurs passés par la partie (révélation d'un joueur parti). */
+  private readonly pseudos = new Map<string, string>();
   private readonly rounds: RoundState[];
   private readonly spares: ThemeRow[];
   private phase: GamePhase = 'countdown';
@@ -137,8 +154,11 @@ export class Game {
     this.introMs = options.introMs ?? this.timing.countdownMs;
     this.audioWaitMs = options.audioWaitMs ?? AUDIO_WAIT_MS;
 
-    const total = Math.min(options.settings.rounds, options.themes.length);
-    this.rounds = options.themes.slice(0, total).map((theme) => this.createRound(theme));
+    const wanted = options.choosers?.length ?? options.settings.rounds;
+    const total = Math.min(wanted, options.themes.length);
+    this.rounds = options.themes
+      .slice(0, total)
+      .map((theme, index) => this.createRound(theme, options.choosers?.[index] ?? []));
     this.spares = options.themes.slice(total);
   }
 
@@ -165,6 +185,7 @@ export class Game {
       return;
     }
     this.players.set(id, { id, pseudo, score: 0, connected: true, ready: new Map() });
+    this.pseudos.set(id, pseudo);
     if (this.started) {
       this.syncPlayer(id);
       this.broadcastPlayers();
@@ -196,7 +217,17 @@ export class Game {
   /** Le joueur quitte volontairement la partie. */
   leave(id: string): void {
     if (!this.players.delete(id)) return;
+    this.dropChooser(id);
     this.afterPlayerLost(() => this.close());
+  }
+
+  /** Playlist : les chansons pas encore jouées d'un joueur parti deviennent des chansons sans joueur. */
+  private dropChooser(id: string): void {
+    this.rounds.forEach((round, index) => {
+      const upcoming =
+        index > this.roundIndex || (index === this.roundIndex && this.phase === 'countdown');
+      if (upcoming) round.choosers = round.choosers.filter((chooser) => chooser !== id);
+    });
   }
 
   private afterPlayerLost(whenEmpty: () => void): void {
@@ -207,7 +238,7 @@ export class Game {
     }
     this.broadcastPlayers();
     // Les joueurs restants n'attendent pas celui qui est parti.
-    if (this.phase === 'listening' && this.everyoneDone()) this.schedule(0, () => this.endRound());
+    if (this.phase === 'listening' && this.everyoneDone()) this.onEveryoneDone();
     if (this.waitingForAudio && this.everyoneReady()) this.startListening();
   }
 
@@ -233,11 +264,21 @@ export class Game {
       round: this.roundIndex,
       totalRounds: this.totalRounds,
       phaseEndsAt: this.phaseEndsAt,
-      players: this.scoreboard(),
+      players: this.scoreboard(forPlayer),
       // Début d'écoute propre au joueur (null s'il n'a pas encore démarré cette manche).
       listenStartedAt: round?.starts.get(forPlayer) ?? null,
       videoUrl: round?.videoToken ? videoPath(round.videoToken) : null,
       progress: this.isProgressive && round ? { ...this.progressOf(round, forPlayer) } : null,
+      playlist: this.isPlaylist && round ? this.playlistView(round, forPlayer) : null,
+    };
+  }
+
+  private playlistView(round: RoundState, playerId: string): PlaylistRoundView {
+    return {
+      ownSong: round.choosers.includes(playerId),
+      found: this.foundCount(round),
+      guess: round.guesses.has(playerId) ? round.guesses.get(playerId)! : undefined,
+      guessWindowEndsAt: round.guessWindowEndsAt,
     };
   }
 
@@ -291,6 +332,9 @@ export class Game {
     const player = this.players.get(playerId);
     if (!player || !player.connected) return { accepted: false, reason: 'not_in_game' };
     const round = this.rounds[this.roundIndex]!;
+    if (this.isPlaylist && round.choosers.includes(playerId)) {
+      return { accepted: false, reason: 'own_song' };
+    }
     // Chaque joueur répond pendant SON temps d'écoute (les retardataires ont le leur).
     const startedAt = round.starts.get(playerId);
     if (
@@ -310,7 +354,7 @@ export class Game {
     if (!verdict.correct) {
       if (progress) this.registerMistake(progress);
       // Éliminé au dernier palier : la manche peut se terminer si tout le monde a fini.
-      if (progress?.eliminated && this.everyoneDone()) this.schedule(0, () => this.endRound());
+      if (progress?.eliminated && this.everyoneDone()) this.onEveryoneDone();
       return {
         accepted: true,
         correct: false,
@@ -328,7 +372,8 @@ export class Game {
       basePoints +
       (verdict.seasonExact ? BONUS_POINTS : 0) +
       (verdict.sequenceExact ? BONUS_POINTS : 0);
-    player.score += points;
+    // Playlist : les scores ne bougent qu'à la révélation (rien ne trahit qui a trouvé).
+    if (!this.isPlaylist) player.score += points;
     round.results.set(playerId, {
       playerId,
       correct: true,
@@ -339,9 +384,9 @@ export class Game {
       tier: progress?.tier ?? null,
     });
 
-    this.broadcast('player:found', { playerId, players: this.scoreboard() });
+    this.announceFound(round, playerId);
     // Tout le monde a fini : révélation tout de suite (après l'accusé de réception).
-    if (this.everyoneDone()) this.schedule(0, () => this.endRound());
+    if (this.everyoneDone()) this.onEveryoneDone();
 
     return {
       accepted: true,
@@ -378,12 +423,79 @@ export class Game {
     if (progress.tier < PROGRESSIVE_LAST_TIER) return { ...progress };
     progress.eliminated = true;
     progress.attemptsLeft = 0;
-    if (this.everyoneDone()) this.schedule(0, () => this.endRound());
+    if (this.everyoneDone()) this.onEveryoneDone();
     return { ...progress };
+  }
+
+  /**
+   * Playlist : « Devine qui l'a choisie », pour un joueur qui a trouvé.
+   * Un seul pari ; `null` = personne (chanson tirée au hasard).
+   */
+  guess(playerId: string, target: string | null): boolean {
+    const round = this.rounds[this.roundIndex];
+    if (!this.isPlaylist || this.phase !== 'listening' || !round) return false;
+    if (!round.results.get(playerId)?.correct || round.guesses.has(playerId)) return false;
+    if (target !== null && (target === playerId || !this.players.has(target))) return false;
+    round.guesses.set(playerId, target);
+    if (round.guessWindowEndsAt !== null && this.everyoneGuessed(round)) {
+      this.schedule(0, () => this.endRound());
+    }
+    return true;
   }
 
   private get isProgressive(): boolean {
     return this.settings.mode === 'progressive';
+  }
+
+  private get isPlaylist(): boolean {
+    return this.settings.mode === 'playlist';
+  }
+
+  /** Un joueur a trouvé : en Playlist, seul qui a choisi la chanson sait qui ; les autres, combien. */
+  private announceFound(round: RoundState, playerId: string): void {
+    if (!this.isPlaylist) {
+      this.broadcast('player:found', { playerId, players: this.scoreboard() });
+      return;
+    }
+    for (const chooser of round.choosers) {
+      if (this.players.has(chooser)) {
+        this.emitter.toPlayer(chooser, 'player:found', {
+          playerId,
+          players: this.scoreboard(chooser),
+        });
+      }
+    }
+    this.broadcast('playlist:found', { found: this.foundCount(round) });
+  }
+
+  /**
+   * Tout le monde a fini : révélation tout de suite. En Playlist, une fenêtre
+   * s'ouvre d'abord pour deviner qui a choisi la chanson (sauf si c'est déjà fait).
+   */
+  private onEveryoneDone(): void {
+    const round = this.rounds[this.roundIndex]!;
+    if (!this.isPlaylist || this.foundCount(round) === 0 || this.everyoneGuessed(round)) {
+      this.schedule(0, () => this.endRound());
+      return;
+    }
+    if (round.guessWindowEndsAt !== null) return;
+    round.guessWindowEndsAt = Date.now() + PLAYLIST.guessWindowMs;
+    this.phaseEndsAt = round.guessWindowEndsAt;
+    this.broadcast('playlist:guessWindow', { endsAt: round.guessWindowEndsAt });
+    this.schedule(PLAYLIST.guessWindowMs, () => this.endRound());
+  }
+
+  private foundCount(round: RoundState): number {
+    let found = 0;
+    for (const result of round.results.values()) if (result.correct) found++;
+    return found;
+  }
+
+  /** Tous les joueurs présents qui ont trouvé ont parié. */
+  private everyoneGuessed(round: RoundState): boolean {
+    return this.connectedPlayers()
+      .filter((player) => round.results.get(player.id)?.correct)
+      .every((player) => round.guesses.has(player.id));
   }
 
   private progressOf(round: RoundState, playerId: string): TierProgress {
@@ -470,13 +582,17 @@ export class Game {
       startedAt,
       phaseEndsAt: startedAt + this.timing.listenMs,
       videoUrl: round.videoToken ? videoPath(round.videoToken) : null,
+      ...(this.isPlaylist && { ownSong: round.choosers.includes(playerId) }),
     });
   }
 
   private endRound(): void {
+    const round = this.rounds[this.roundIndex]!;
+    const playlist = this.isPlaylist ? this.settlePlaylist(round) : undefined;
     this.phase = 'reveal';
     this.phaseEndsAt = Date.now() + this.timing.revealMs;
     this.lastReveal = this.buildReveal();
+    if (playlist) this.lastReveal.playlist = playlist;
     this.broadcast('round:reveal', this.lastReveal);
     this.schedule(this.timing.revealMs, () => {
       if (this.roundIndex + 1 < this.totalRounds) this.enterCountdown(this.roundIndex + 1);
@@ -501,9 +617,63 @@ export class Game {
     if (round === this.roundIndex) this.finish('completed');
   }
 
+  /**
+   * Playlist : points de la manche, comptés à la révélation.
+   * - qui a trouvé : points normaux, +50 si un joueur a choisi la chanson, +50 s'il a deviné qui ;
+   * - qui a choisi : +50 par joueur qui n'a pas trouvé (0 si tout le monde ou personne n'a trouvé).
+   */
+  private settlePlaylist(round: RoundState): PlaylistReveal {
+    const chosen = round.choosers.length > 0;
+    const answerers = [...round.participants].filter((id) => {
+      const player = this.players.get(id);
+      if (!player || round.choosers.includes(id)) return false;
+      return player.connected || round.results.get(id)?.correct === true;
+    });
+    const found = answerers.filter((id) => round.results.get(id)?.correct).length;
+    const points = chosen ? chooserPoints(answerers.length, found) : 0;
+
+    const guesses: PlaylistReveal['guesses'] = [];
+    for (const [playerId, guess] of round.guesses) {
+      const correct = guess === null ? !chosen : round.choosers.includes(guess);
+      guesses.push({ playerId, guess, correct });
+    }
+    for (const result of round.results.values()) {
+      if (!result.correct) continue;
+      const foundBonus = chosen ? PLAYLIST.foundBonus : 0;
+      const guessedRight = guesses.some((g) => g.playerId === result.playerId && g.correct);
+      const guessBonus = guessedRight ? PLAYLIST.guessBonus : 0;
+      result.points += foundBonus + guessBonus;
+      result.playlist = { ownSong: false, foundBonus, guessBonus, chooserPoints: 0 };
+      const player = this.players.get(result.playerId);
+      if (player) player.score += result.points;
+    }
+    for (const id of round.choosers) {
+      const player = this.players.get(id);
+      if (!player) continue;
+      player.score += points;
+      round.results.set(id, {
+        playerId: id,
+        correct: false,
+        points,
+        elapsedMs: null,
+        seasonExact: false,
+        sequenceExact: false,
+        tier: null,
+        playlist: { ownSong: true, foundBonus: 0, guessBonus: 0, chooserPoints: points },
+      });
+    }
+    return {
+      choosers: round.choosers.map((id) => ({ id, pseudo: this.pseudos.get(id) ?? '?' })),
+      answerers: answerers.length,
+      found,
+      chooserPoints: points,
+      guesses,
+    };
+  }
+
   // ─── Utilitaires ──────────────────────────────────────────────────────────
 
-  private createRound(theme: ThemeRow): RoundState {
+  private createRound(theme: ThemeRow, choosers: string[] = []): RoundState {
     return {
       theme,
       token: this.media.register(theme.audioUrl),
@@ -514,6 +684,9 @@ export class Game {
       starts: new Map(),
       results: new Map(),
       progress: new Map(),
+      choosers: [...choosers],
+      guesses: new Map(),
+      guessWindowEndsAt: null,
     };
   }
 
@@ -606,7 +779,10 @@ export class Game {
   }
 
   private broadcastPlayers(): void {
-    if (this.started) this.broadcast('game:players', this.scoreboard());
+    if (!this.started) return;
+    for (const id of this.players.keys()) {
+      this.emitter.toPlayer(id, 'game:players', this.scoreboard(id));
+    }
   }
 
   private clearAbandonTimer(): void {
@@ -614,14 +790,25 @@ export class Game {
     this.abandonTimer = null;
   }
 
-  private scoreboard(): PlayerScore[] {
+  /**
+   * Classement. En Playlist, pendant la manche, qui a trouvé reste secret
+   * (sauf pour qui a choisi la chanson, `forPlayer`).
+   */
+  private scoreboard(forPlayer?: string): PlayerScore[] {
     const round = this.rounds[this.roundIndex];
+    const hideFound =
+      this.isPlaylist &&
+      (this.phase === 'countdown' || this.phase === 'listening') &&
+      !(forPlayer && round?.choosers.includes(forPlayer));
     return [...this.players.values()]
       .map((player) => ({
         id: player.id,
         pseudo: player.pseudo,
         score: player.score,
-        found: round?.results.get(player.id)?.correct ?? false,
+        // Sa propre coche n'a rien de secret (et sert à la reconnexion).
+        found:
+          (!hideFound || player.id === forPlayer) &&
+          (round?.results.get(player.id)?.correct ?? false),
         connected: player.connected,
       }))
       .sort((a, b) => b.score - a.score);
@@ -636,12 +823,14 @@ export class Game {
     return this.connectedPlayers().every((player) => player.ready.get(this.roundIndex) === url);
   }
 
-  /** Tous les joueurs connectés ont trouvé (ou sont éliminés, en Progressif). */
-  /** Tous les participants connectés ont trouvé (ou sont éliminés, en Progressif). */
+  /**
+   * Tous les participants connectés ont trouvé (ou sont éliminés, en Progressif).
+   * En Playlist, qui a choisi la chanson ne répond pas : il n'est pas attendu.
+   */
   private everyoneDone(): boolean {
     const round = this.rounds[this.roundIndex]!;
     return this.connectedPlayers()
-      .filter((player) => round.participants.has(player.id))
+      .filter((player) => round.participants.has(player.id) && !round.choosers.includes(player.id))
       .every(
         (player) =>
           round.results.get(player.id)?.correct || round.progress.get(player.id)?.eliminated,

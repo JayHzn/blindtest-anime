@@ -43,6 +43,7 @@ export class Catalogue {
   private readonly franchises = new Map<number, FranchiseRecord>();
   private readonly themes = new Map<number, ThemeRow>();
   private readonly themeList: ThemeRow[];
+  private readonly themesByAnime = new Map<number, ThemeRow[]>();
 
   static load(path: string): Catalogue {
     const db = new Database(path, { readonly: true, fileMustExist: true });
@@ -86,7 +87,12 @@ export class Catalogue {
       });
     }
     this.themeList = data.themes.filter((theme) => this.anime.has(theme.animeId));
-    for (const theme of this.themeList) this.themes.set(theme.id, theme);
+    for (const theme of this.themeList) {
+      this.themes.set(theme.id, theme);
+      const list = this.themesByAnime.get(theme.animeId) ?? [];
+      list.push(theme);
+      this.themesByAnime.set(theme.animeId, list);
+    }
 
     this.titleIndex = { version: this.version, entries: this.buildTitleEntries() };
   }
@@ -128,11 +134,31 @@ export class Catalogue {
     return this.themeList.filter(this.themeFilter(filters)).length;
   }
 
+  /** Musiques d'un anime (types donnés), triées OP puis ED puis insert, par numéro. */
+  themesOfAnime(animeId: number, types: readonly ThemeRow['type'][]): ThemeRow[] {
+    const order = { OP: 0, ED: 1, IN: 2 } as const;
+    return (this.themesByAnime.get(animeId) ?? [])
+      .filter((theme) => types.includes(theme.type))
+      .sort((a, b) => order[a.type] - order[b.type] || a.sequence - b.sequence);
+  }
+
+  /** Franchise d'une musique (pour éviter de compléter une playlist avec la même série). */
+  franchiseOfTheme(themeId: number): number | undefined {
+    const theme = this.themes.get(themeId);
+    return theme ? this.anime.get(theme.animeId)?.franchiseId : undefined;
+  }
+
   /**
    * Tire `count` musiques au hasard parmi celles qui respectent les filtres,
-   * jamais deux fois la même franchise dans une partie.
+   * jamais deux fois la même franchise dans une partie (ni une franchise exclue).
    */
-  pickThemes(filters: ThemeFilters, count: number, random: () => number = Math.random): ThemeRow[] {
+  pickThemes(
+    filters: ThemeFilters,
+    count: number,
+    random: () => number = Math.random,
+    excludeFranchises: ReadonlySet<number> = new Set(),
+  ): ThemeRow[] {
+    if (count <= 0) return [];
     const candidates = this.themeList.filter(this.themeFilter(filters));
     // Mélange de Fisher-Yates
     for (let i = candidates.length - 1; i > 0; i--) {
@@ -140,7 +166,7 @@ export class Catalogue {
       [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
     }
     const picked: ThemeRow[] = [];
-    const usedFranchises = new Set<number>();
+    const usedFranchises = new Set<number>(excludeFranchises);
     for (const theme of candidates) {
       const franchiseId = this.anime.get(theme.animeId)!.franchiseId;
       if (usedFranchises.has(franchiseId)) continue;

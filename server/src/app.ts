@@ -56,7 +56,7 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
   });
   const emitter = playerEmitter(io);
   const games = new GameManager(catalogue, media, emitter);
-  const rooms = new RoomManager(games, emitter);
+  const rooms = new RoomManager(games, emitter, Math.random, { catalogue, media });
   const sweeper = setInterval(() => rooms.sweep(), ROOM_SWEEP_INTERVAL_MS);
   sweeper.unref();
 

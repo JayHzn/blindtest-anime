@@ -1,12 +1,16 @@
 import { THEME_TYPES, type PopularityTier, type ThemeFilters, type ThemeType } from './catalogue';
+import { PLAYLIST, type PlaylistReveal } from './playlist';
 
 /**
  * Modes de jeu :
  * - `classic` : 15 s d'écoute continue, points selon la rapidité ;
- * - `progressive` : extraits de plus en plus longs (façon Songspot), points selon le palier.
+ * - `progressive` : extraits de plus en plus longs (façon Songspot), points selon le palier ;
+ * - `playlist` : (multi) les joueurs choisissent les chansons, jouées avec les règles du Classique.
  */
-export type GameModeId = 'classic' | 'progressive';
-export const GAME_MODES: readonly GameModeId[] = ['classic', 'progressive'];
+export type GameModeId = 'classic' | 'progressive' | 'playlist';
+export const GAME_MODES: readonly GameModeId[] = ['classic', 'progressive', 'playlist'];
+export const SOLO_MODES: readonly GameModeId[] = ['classic', 'progressive'];
+export const ROOM_MODES: readonly GameModeId[] = GAME_MODES;
 
 export interface ModeTiming {
   /** Compte à rebours avant l'écoute (son de cloche). */
@@ -20,6 +24,7 @@ export interface ModeTiming {
 export const MODE_TIMINGS: Record<GameModeId, ModeTiming> = {
   classic: { countdownMs: 3000, listenMs: 15_000, revealMs: 10_000 },
   progressive: { countdownMs: 3000, listenMs: 60_000, revealMs: 10_000 },
+  playlist: { countdownMs: 3000, listenMs: 15_000, revealMs: 10_000 },
 };
 
 /** Mode Progressif : durée des extraits, points et essais par palier. */
@@ -65,8 +70,12 @@ export const POPULARITY_TIERS: readonly PopularityTier[] = [100, 500, 2000, 'all
 
 export interface GameSettings {
   mode: GameModeId;
+  /** Nombre de manches (ignoré en Playlist : toutes les chansons choisies sont jouées). */
   rounds: number;
+  /** Filtres du tirage (en Playlist : complément aléatoire ; seul le type s'applique aux choix). */
   filters: ThemeFilters;
+  /** Playlist : chansons choisies par chaque joueur (1 à 10). */
+  songsPerPlayer?: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -121,7 +130,18 @@ export function sanitizeSettings(input: unknown): GameSettings | null {
   const mode = GAME_MODES.includes(raw.mode as GameModeId)
     ? (raw.mode as GameModeId)
     : DEFAULT_SETTINGS.mode;
-  return { mode, rounds, filters };
+  const settings: GameSettings = { mode, rounds, filters };
+
+  // Conservé hors Playlist pour ne pas perdre la valeur quand l'hôte change de mode.
+  if (typeof raw.songsPerPlayer === 'number' && Number.isInteger(raw.songsPerPlayer)) {
+    settings.songsPerPlayer = Math.min(
+      PLAYLIST.songsMax,
+      Math.max(PLAYLIST.songsMin, raw.songsPerPlayer),
+    );
+  } else if (mode === 'playlist') {
+    settings.songsPerPlayer = PLAYLIST.songsDefault;
+  }
+  return settings;
 }
 
 /** Pseudo nettoyé (espaces, longueur), « Joueur » par défaut. */
@@ -168,6 +188,32 @@ export interface GameSnapshot {
   videoUrl: string | null;
   /** Mode Progressif : progression du joueur dans la manche en cours. */
   progress: TierProgress | null;
+  /** Mode Playlist : ce que le joueur voit de la manche en cours. */
+  playlist: PlaylistRoundView | null;
+}
+
+/** Manche en cours du mode Playlist, vue par un joueur (rien sur les choix des autres). */
+export interface PlaylistRoundView {
+  /** Le joueur a choisi cette chanson : il ne répond pas. */
+  ownSong: boolean;
+  /** Nombre anonyme de joueurs qui ont trouvé. */
+  found: number;
+  /** Son pari « Devine qui l'a choisie » (`null` : personne, tirée au hasard). */
+  guess: string | null | undefined;
+  /** Fenêtre pour deviner, ouverte quand tout le monde a trouvé. */
+  guessWindowEndsAt: number | null;
+}
+
+/** Mode Playlist : détail des points d'un joueur pour la manche (le total est dans `points`). */
+export interface PlaylistPoints {
+  /** Le joueur avait choisi la chanson. */
+  ownSong: boolean;
+  /** Bonus « Chanson d'un joueur ». */
+  foundBonus: number;
+  /** Bonus « Devine qui l'a choisie ». */
+  guessBonus: number;
+  /** Points de qui a choisi la chanson. */
+  chooserPoints: number;
 }
 
 export interface PlayerRoundResult {
@@ -180,6 +226,8 @@ export interface PlayerRoundResult {
   sequenceExact: boolean;
   /** Mode Progressif : palier auquel la réponse a été trouvée. */
   tier: number | null;
+  /** Mode Playlist : détail des points. */
+  playlist?: PlaylistPoints;
 }
 
 export interface LocalizedTitle {
@@ -209,12 +257,14 @@ export interface RoundReveal {
   };
   results: PlayerRoundResult[];
   players: PlayerScore[];
+  /** Mode Playlist : qui a choisi la chanson, paris, points. */
+  playlist?: PlaylistReveal;
 }
 
 export type AnswerResult =
   | {
       accepted: false;
-      reason: 'not_listening' | 'already_found' | 'not_in_game' | 'eliminated';
+      reason: 'not_listening' | 'already_found' | 'not_in_game' | 'eliminated' | 'own_song';
     }
   | {
       accepted: true;

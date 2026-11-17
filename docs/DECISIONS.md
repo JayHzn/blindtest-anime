@@ -119,6 +119,37 @@ Validé le 2026-11-17.
   - à la révélation, la vidéo reprend là où le dernier extrait s'est arrêté ;
   - au dernier palier, le bouton « Palier suivant » devient **« Abandonner »** : le joueur qui ne sait pas passe la manche (0 point) et compte comme ayant fini (révélation immédiate en solo, dès que tout le monde a fini en multi).
 
+### Playlist des joueurs (v2, multi uniquement)
+
+Validé le 2026-11-17 (maquette : https://claude.ai/artifact/2uaSVC9K12YCnM4VXEiCVA).
+
+- **Principe** : chaque joueur choisit des chansons en secret, puis tout le monde les joue avec les règles du Classique (15 s, de 200 à 50 points, bonus de précision). Pas de variante Progressive.
+- **3 joueurs minimum** au lancement.
+- **Réglage** : chansons par joueur, de 1 à 10 (5 par défaut). Pas de réglage de manches : toutes les chansons choisies sont jouées.
+- **Phase de choix** :
+  - 60 s jusqu'à 5 chansons, +6 s par chanson au-delà (90 s pour 10) ;
+  - recherche avec l'autocomplétion des réponses, puis liste des chansons de l'anime (OP puis ED, filtre texte pour les longues listes) ;
+  - choix libre dans tout le catalogue : seul le filtre de type (OP/ED) s'applique aux choix ;
+  - aperçu de 5 s au clic, à partir de 25 % du morceau, un seul à la fois ;
+  - chacun voit ses choix et seulement le nombre de chansons des autres ;
+  - quand tout le monde a rempli sa playlist, la partie démarre 3 s plus tard ;
+  - temps écoulé : les chansons manquantes sont tirées au hasard avec les filtres de la room, jamais dans une série déjà choisie.
+- **Ordre de jeu** : mélange aléatoire qui évite, si possible, deux chansons du même joueur à la suite. Une chanson choisie par plusieurs joueurs est jouée une seule fois, et compte pour chacun d'eux.
+- **Joueur dont la chanson passe** :
+  - il écoute sans répondre : écran « C'est ta chanson ! », avec en direct qui la trouve ;
+  - il gagne **+50 par joueur qui ne la trouve pas**, mais 0 si tout le monde la trouve ou si personne ne la trouve.
+- **Joueurs qui la trouvent** :
+  - points normaux, **+50 « Chanson d'un joueur »** (0 pour une chanson tirée au hasard) ;
+  - **« Devine qui l'a choisie »** : proposé dès qu'on a trouvé, un seul pari parmi les autres joueurs ou « Personne (tirée au hasard) », **+50** si c'est juste ;
+  - quand tous ceux qui répondent ont trouvé, une fenêtre de **7 s** reste pour deviner, puis la révélation arrive (plus tôt si tout le monde a parié).
+- **Révélation** : « Choisi par Kevin : 2 joueurs sur 4 ont trouvé », ou « Chanson tirée au hasard ».
+- **Secret** (rien ne trahit qui a choisi la chanson avant la révélation) :
+  - jetons de chanson opaques et propres à chaque joueur pendant le choix ;
+  - pendant la manche, les autres ne voient ni les coches « a trouvé » ni les scores bouger : un compteur anonyme (« 2 joueurs ont trouvé ») et des scores mis à jour à la révélation ;
+  - seul le joueur qui a choisi la chanson voit qui la trouve ;
+  - le bonus « Chanson d'un joueur » n'est ajouté qu'à la révélation (sinon il indiquerait si la chanson a été tirée au hasard).
+- **Départs** : déconnexion, le joueur garde ses points et ses chansons ; départ volontaire pendant le choix, ses chansons sont retirées ; départ pendant la partie, ses chansons restantes sont jouées comme des chansons sans joueur.
+
 ### Feuille de route
 
 - Facile (QCM 4 choix)

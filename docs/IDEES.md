@@ -16,24 +16,7 @@ Ce qui ne nous différencie PAS : multi temps réel, filtres, révélation vidé
 
 ## Concepts validés
 
-### Mode Playlist des joueurs (inclut l'ancien « Piège »)
-
-- **Option** : chansons par joueur, de 1 à 10. À 1, c'est le mode Piège.
-- **Phase de choix** : 60 s pour 5 chansons par défaut, 90 s si l'hôte monte à 10. Recherche par autocomplétion, aperçu de 5 s. Choix secrets.
-- **Tirage** :
-  - si le temps est écoulé, les choix manquants sont complétés au hasard selon les filtres ;
-  - l'hôte fixe le nombre de manches ;
-  - le serveur tire le même nombre de chansons dans le choix de chaque joueur, puis mélange.
-- **Doublon** : la chanson est jouée une fois, avec les deux joueurs comme poseurs.
-- **Sa propre chanson** : le poseur ne répond pas ; écran « C'est ton piège », il voit en direct qui trouve.
-- **Scoring du poseur** :
-  - tout le monde trouve : 0 ;
-  - personne ne trouve : 0, sans pénalité (perdre les +100 par joueur piégé suffit à décourager les sons introuvables) ;
-  - certains trouvent : +100 par joueur piégé.
-- **Joueurs qui trouvent** : points normaux + 50 (« piège désamorcé »).
-- **Bonus « Devine qui l'a choisie »** : une fois l'anime trouvé, choisir le poseur parmi les pseudos ; +50 si c'est juste.
-- **Révélation** : « Choisi par Kevin : 2 joueurs sur 4 ont trouvé ».
-- Multi uniquement.
+Le mode Playlist des joueurs est passé dans DECISIONS.md (v2).
 
 ### Mode Enchères
 

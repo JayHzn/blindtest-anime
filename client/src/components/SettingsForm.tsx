@@ -1,6 +1,9 @@
 import {
-  GAME_MODES,
+  PLAYLIST,
   POPULARITY_TIERS,
+  SOLO_MODES,
+  pickingDurationMs,
+  type GameModeId,
   type GameSettings,
   type PopularityTier,
   type ThemeType,
@@ -12,6 +15,10 @@ import styles from './SettingsForm.module.css';
 
 const ROUND_OPTIONS = [5, 10, 15, 20];
 const PLAYABLE_TYPES: ThemeType[] = ['OP', 'ED'];
+const SONG_OPTIONS = Array.from(
+  { length: PLAYLIST.songsMax - PLAYLIST.songsMin + 1 },
+  (_, i) => PLAYLIST.songsMin + i,
+);
 
 interface YearPreset {
   id: string;
@@ -38,11 +45,20 @@ interface SettingsFormProps {
   onChange: (settings: GameSettings) => void;
   /** Lecture seule (joueurs d'une room qui ne sont pas l'hôte). */
   disabled?: boolean;
+  /** Modes proposés (la Playlist n'existe qu'en room). */
+  modes?: readonly GameModeId[];
 }
 
 /** Réglages d'une partie : mode, manches, popularité, types, années. */
-export function SettingsForm({ settings, onChange, disabled = false }: SettingsFormProps) {
+export function SettingsForm({
+  settings,
+  onChange,
+  disabled = false,
+  modes = SOLO_MODES,
+}: SettingsFormProps) {
   const { t } = useI18n();
+  const playlist = settings.mode === 'playlist';
+  const songsPerPlayer = settings.songsPerPlayer ?? PLAYLIST.songsDefault;
 
   const updateFilters = (patch: Partial<GameSettings['filters']>) =>
     onChange({ ...settings, filters: { ...settings.filters, ...patch } });
@@ -69,7 +85,7 @@ export function SettingsForm({ settings, onChange, disabled = false }: SettingsF
       <section className={styles.section}>
         <h2 className={styles.label}>{t('setup.mode')}</h2>
         <div className={styles.modes} role="radiogroup" aria-label={t('setup.mode')}>
-          {GAME_MODES.map((mode) => (
+          {modes.map((mode) => (
             <button
               key={mode}
               type="button"
@@ -86,19 +102,42 @@ export function SettingsForm({ settings, onChange, disabled = false }: SettingsF
         </div>
       </section>
 
-      <section className={styles.section}>
-        <h2 className={styles.label}>{t('setup.rounds')}</h2>
-        <ChipGroup
-          label={t('setup.rounds')}
-          options={ROUND_OPTIONS.map((value) => ({
-            value,
-            label: String(value),
-            disabled: disabled && value !== settings.rounds,
-          }))}
-          selected={[settings.rounds]}
-          onToggle={(rounds) => !disabled && onChange({ ...settings, rounds })}
-        />
-      </section>
+      {playlist ? (
+        <section className={styles.section}>
+          <h2 className={styles.label}>
+            {t('setup.songsPerPlayer')}{' '}
+            <span className={styles.hint}>
+              {t('setup.songsPerPlayer.hint', { s: pickingDurationMs(songsPerPlayer) / 1000 })}
+            </span>
+          </h2>
+          <ChipGroup
+            label={t('setup.songsPerPlayer')}
+            options={SONG_OPTIONS.map((value) => ({
+              value,
+              label: String(value),
+              disabled: disabled && value !== songsPerPlayer,
+            }))}
+            selected={[songsPerPlayer]}
+            onToggle={(value) => !disabled && onChange({ ...settings, songsPerPlayer: value })}
+          />
+        </section>
+      ) : (
+        <section className={styles.section}>
+          <h2 className={styles.label}>{t('setup.rounds')}</h2>
+          <ChipGroup
+            label={t('setup.rounds')}
+            options={ROUND_OPTIONS.map((value) => ({
+              value,
+              label: String(value),
+              disabled: disabled && value !== settings.rounds,
+            }))}
+            selected={[settings.rounds]}
+            onToggle={(rounds) => !disabled && onChange({ ...settings, rounds })}
+          />
+        </section>
+      )}
+
+      {playlist ? <p className={styles.note}>{t('setup.playlist.filtersNote')}</p> : null}
 
       <section className={styles.section}>
         <h2 className={styles.label}>
