@@ -1,7 +1,7 @@
 import type { MessageKey } from './fr';
 
 export const en: Record<MessageKey, string> = {
-  'app.name': 'blindtest anime',
+  'app.name': 'Anilind',
   'home.tagline': 'Guess the openings and endings of your favorite anime.',
   'home.pseudo.label': 'Your nickname',
   'home.pseudo.placeholder': 'e.g. Sakura',

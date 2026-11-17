@@ -1,12 +1,12 @@
 # Déploiement Render (Blueprint) : deux services gratuits.
-#  - blindtest-anime      : le site (statique, servi par le CDN de Render, jamais en veille)
-#  - blindtest-anime-api  : le serveur (API, WebSockets, proxy audio/vidéo ; se met en veille après 15 min)
+#  - anilind      : le site (statique, servi par le CDN de Render, jamais en veille)
+#  - anilind-api  : le serveur (API, WebSockets, proxy audio/vidéo ; se met en veille après 15 min)
 #
 # Si Render attribue une adresse différente (nom déjà pris), mettre à jour
 # CLIENT_ORIGIN et VITE_SERVER_URL dans le tableau de bord, puis redéployer.
 services:
   - type: web
-    name: blindtest-anime-api
+    name: anilind-api
     runtime: node
     plan: free
     region: frankfurt
@@ -22,10 +22,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: CLIENT_ORIGIN
-        value: https://blindtest-anime.onrender.com
+        value: https://anilind.onrender.com
 
   - type: web
-    name: blindtest-anime
+    name: anilind
     runtime: static
     buildCommand: npm ci && npm run build -w client
     staticPublishPath: client/dist
@@ -34,7 +34,7 @@ services:
       - key: NODE_VERSION
         value: '22'
       - key: VITE_SERVER_URL
-        value: https://blindtest-anime-api.onrender.com
+        value: https://anilind-api.onrender.com
     headers:
       # Fichiers versionnés (hash dans le nom) : cache navigateur d'un an.
       - path: /assets/*

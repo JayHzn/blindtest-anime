@@ -12,7 +12,7 @@ export function AppHeader({ center, children }: AppHeaderProps) {
   return (
     <header className={styles.header}>
       <span className={styles.logo}>
-        blindtest <span className={styles.accent}>anime</span> ♪
+        Ani<span className={styles.accent}>lind</span> ♪
       </span>
       {center ? <div className={styles.center}>{center}</div> : null}
       <div className={styles.right}>{children}</div>

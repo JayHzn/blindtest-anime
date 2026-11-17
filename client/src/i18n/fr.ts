@@ -1,5 +1,5 @@
 export const fr = {
-  'app.name': 'blindtest anime',
+  'app.name': 'Anilind',
   'home.tagline': 'Devine les openings et endings de tes animes préférés.',
   'home.pseudo.label': 'Ton pseudo',
   'home.pseudo.placeholder': 'Ex. Sakura',

@@ -1,6 +1,6 @@
-# Blindtest Anime
+# Anilind
 
-Blindtest de musiques d'anime (openings et endings) à jouer seul ou entre potes :
+Anilind, le blindtest de musiques d'anime (openings et endings) à jouer seul ou entre potes :
 mode Classique (15 s, plus tu es rapide plus tu marques) et mode Progressif
 (0,5 s → 1 s → 5 s → 15 s), en solo ou dans une room jusqu'à 8 joueurs.
 
@@ -42,10 +42,10 @@ npm run dev                        # back sur :3001, front sur http://localhost:
 
 Le fichier [`render.yaml`](render.yaml) décrit deux services gratuits :
 
-| Service               | Adresse                                  | Rôle                                  |
-| --------------------- | ---------------------------------------- | ------------------------------------- |
-| `blindtest-anime`     | https://blindtest-anime.onrender.com     | Site statique (CDN, jamais en veille) |
-| `blindtest-anime-api` | https://blindtest-anime-api.onrender.com | API, WebSockets, proxy audio/vidéo    |
+| Service       | Adresse                          | Rôle                                  |
+| ------------- | -------------------------------- | ------------------------------------- |
+| `anilind`     | https://anilind.onrender.com     | Site statique (CDN, jamais en veille) |
+| `anilind-api` | https://anilind-api.onrender.com | API, WebSockets, proxy audio/vidéo    |
 
 1. Sur Render : **New → Blueprint**, choisir ce dépôt GitHub, valider.
 2. Premier build du serveur : environ 5 min (génération du catalogue).

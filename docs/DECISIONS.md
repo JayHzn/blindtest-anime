@@ -1,4 +1,4 @@
-# Blindtest Anime — Décisions de conception
+# Anilind (blindtest anime) — Décisions de conception
 
 Validé le 2026-11-17.
 
@@ -66,7 +66,8 @@ Validé le 2026-11-17.
 - Mise en ligne (étape 6), décidée le 2026-11-17 : **en deux temps**.
   1. Render d'abord, avec le proxy audio/vidéo vers AnimeThemes (déjà testé), pour jouer tout de suite.
   2. Miroir audio R2 + Worker ensuite.
-  - Blueprint `render.yaml` : `blindtest-anime` (static site) et `blindtest-anime-api` (web service, Francfort), adresses fixées dans la config (noms libres au 2026-11-17).
+  - Nom du site : **Anilind** (choisi le 2026-11-17).
+  - Blueprint `render.yaml` : `anilind` (static site, https://anilind.onrender.com) et `anilind-api` (web service, Francfort, https://anilind-api.onrender.com), adresses fixées dans la config (noms libres au 2026-11-17).
   - Catalogue généré au build du serveur (~5 min) ; un build qui échoue laisse la version en ligne.
   - Code publié sur le dépôt GitHub public `JayHzn/blindtest-anime` (aucun secret dans le dépôt).
 
