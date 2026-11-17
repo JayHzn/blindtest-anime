@@ -1,39 +1,66 @@
 # Anilind
 
-Anilind, le blindtest de musiques d'anime (openings et endings) à jouer seul ou entre potes :
-mode Classique (15 s, plus tu es rapide plus tu marques) et mode Progressif
-(0,5 s → 1 s → 5 s → 15 s), en solo ou dans une room jusqu'à 8 joueurs.
+Le blindtest des openings et endings d'anime, à jouer seul ou entre potes.
 
-- Décisions de conception : [docs/DECISIONS.md](docs/DECISIONS.md)
-- Musiques et vidéos : [AnimeThemes.moe](https://animethemes.moe) ; popularité et jaquettes : [AniList](https://anilist.co) ; titres français : [Wikidata](https://www.wikidata.org)
+## Lancer une partie
 
-## Structure
+1. Choisis un pseudo.
+2. **Solo** : règle ta partie et lance-la.
+   **Entre potes** : crée une room et partage son code de 4 lettres (ou le lien). Jusqu'à 8 joueurs. Chacun clique « Je suis prêt ! », puis l'hôte lance la partie.
 
-| Dossier   | Rôle                                                      |
-| --------- | --------------------------------------------------------- |
-| `client/` | Front React + Vite + TypeScript (direction Pastel Sakura) |
-| `server/` | Back Node + Fastify + Socket.IO + catalogue SQLite        |
-| `shared/` | Types et logique partagés (API, événements, recherche)    |
+### Réglages
 
-## Démarrage
+- **Mode** : Classique ou Progressif (voir plus bas).
+- **Manches** : 5, 10, 15 ou 20.
+- **Popularité** : Top 100, Top 500, Top 2000 ou tout le catalogue (selon le nombre de fans sur AniList).
+- **Types** : openings, endings, ou les deux.
+- **Années** : toutes, avant 2000, 2000–2009, 2010–2019 ou 2020+.
 
-Prérequis : Node 22+.
+## Déroulement d'une manche
 
-```bash
-npm install
-npm run catalogue:sync -w server   # génère server/data/catalogue.db (~5 min)
-npm run dev                        # back sur :3001, front sur http://localhost:5173
-```
+1. Une cloche sonne, puis 3-2-1.
+2. Un extrait de la chanson se joue, à partir d'un moment pris au hasard.
+3. Tape le nom de l'anime : l'autocomplétion te propose les titres au fil de la frappe.
+4. Révélation : la vidéo de l'opening reprend là où l'extrait s'est arrêté, avec le titre, le numéro de l'OP/ED, la chanson et l'artiste.
 
-## Scripts
+## Les modes
 
-| Commande                                         | Effet                                                  |
-| ------------------------------------------------ | ------------------------------------------------------ |
-| `npm run dev`                                    | Lance le back et le front en watch                     |
-| `npm run build`                                  | Build de production (server + client)                  |
-| `npm run typecheck`                              | Vérifie les types de tous les packages                 |
-| `npm test`                                       | Lance les tests                                        |
-| `npm run lint` / `npm run format`                | ESLint / Prettier                                      |
-| `npm run catalogue:sync -w server [-- --cached]` | Synchro du catalogue (`--cached` : réutilise les API)  |
-| `npm run catalogue:check -w server`              | Diagnostic du catalogue (taille, vitesse de recherche) |
-| `npm run smoke -w server`                        | Joue une manche contre un serveur qui tourne           |
+### Classique
+
+- 15 secondes pour trouver, autant d'essais que tu veux.
+- Plus tu réponds vite, plus tu marques : **de 200 points** (réponse immédiate) **à 50 points** (dernière seconde).
+- Mauvaise réponse : 0 point, mais tu peux réessayer tant que le temps n'est pas écoulé.
+
+### Progressif
+
+L'extrait s'allonge à chaque palier, et chaque palier rapporte moins :
+
+| Palier | 0,5 s | 1 s | 5 s | 15 s |
+| ------ | ----- | --- | --- | ---- |
+| Points | 200   | 150 | 100 | 50   |
+
+- Tu peux **réécouter** le palier en cours autant que tu veux, ou passer au **palier suivant** quand tu veux.
+- **3 essais par palier** : après 3 erreurs, tu passes automatiquement au palier suivant.
+- Au dernier palier, 3 erreurs ou un clic sur **« Abandonner »** : manche perdue (0 point).
+- 60 secondes au total par manche.
+
+## Les réponses
+
+- **Le nom de l'anime suffit**, toutes saisons confondues : « Shingeki no Kyojin » marche pour n'importe quelle saison.
+- Titres français, anglais, japonais (romaji) et abréviations acceptés ; majuscules, accents et petites fautes de frappe pardonnés.
+- **Bonus de précision**, en plus des points de la manche :
+  - **+25** si tu donnes la saison exacte (quand l'anime en a plusieurs) ;
+  - **+25** si tu indiques le bon numéro d'opening ou d'ending (champ « N° OP/ED »).
+
+## À plusieurs
+
+- Tout le monde entend le même extrait au même moment.
+- Le classement s'affiche en direct : tu vois qui a trouvé, jamais la réponse.
+- Chacun marque selon sa propre rapidité ; la révélation arrive dès que tout le monde a trouvé.
+- Si ton son met du temps à charger, ton chrono ne démarre qu'à ce moment-là : pas de pénalité.
+- Coupure ou page rechargée : tu reviens dans la partie avec ton score.
+- En fin de partie : classement final, puis retour au salon pour rejouer.
+
+## En solo
+
+À la fin de chaque partie, ton score est comparé à ton record pour les mêmes réglages.
