@@ -1,0 +1,48 @@
+/* Design tokens — direction « Pastel Sakura » (voir docs/DECISIONS.md) */
+:root {
+  /* Fonds & surfaces */
+  --color-bg: #1b1424;
+  --color-surface: #241b30;
+  --color-surface-2: #2a2035;
+  --color-surface-3: #33284a;
+  --color-surface-hover: #3a2c50;
+  --color-border: #4a3a63;
+
+  /* Texte */
+  --color-text: #fff4fa;
+  --color-text-muted: #cdbcda;
+
+  /* Accents */
+  --color-accent: #ff9ec7;
+  --color-accent-strong: #ffc4dd;
+  --color-lavender: #b9a6ff;
+  --color-mint: #8ff0c8;
+  --color-peach: #ffd58a;
+  --color-danger: #ff8a9a;
+
+  --gradient-progress: linear-gradient(90deg, var(--color-lavender), var(--color-accent));
+
+  /* Typo */
+  --font-display: 'Fredoka Variable', 'Fredoka', system-ui, sans-serif;
+  --font-body: 'Nunito Variable', 'Nunito', system-ui, sans-serif;
+
+  /* Rayons */
+  --radius-sm: 12px;
+  --radius-md: 24px;
+  --radius-lg: 40px;
+  --radius-pill: 999px;
+
+  /* Espacements */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --shadow-pop: 0 16px 40px rgb(0 0 0 / 0.45);
+  --shadow-glow: 0 20px 60px rgb(255 158 199 / 0.18);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}

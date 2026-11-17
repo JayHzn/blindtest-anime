@@ -1,0 +1,35 @@
+.switch {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+}
+
+.option {
+  min-width: 44px;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.option:hover {
+  color: var(--color-text);
+}
+
+.active {
+  background: var(--color-lavender);
+  color: var(--color-bg);
+}
+
+.active:hover {
+  color: var(--color-bg);
+}

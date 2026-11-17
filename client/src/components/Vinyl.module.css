@@ -1,0 +1,32 @@
+.vinyl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle, #2e2340 0 3px, #261d35 3px 6px);
+  box-shadow:
+    0 0 0 10px #2e2340,
+    var(--shadow-glow);
+}
+
+.spinning {
+  animation: spin 6s linear infinite;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36%;
+  height: 36%;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
