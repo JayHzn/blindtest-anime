@@ -86,6 +86,13 @@ Validé le 2026-11-17.
 - Essais illimités pendant les 15 s.
 - 10 manches par défaut, réglable.
 - En multi : tout le monde peut trouver, chacun selon sa rapidité.
+- Détails du moteur (étape 2) :
+  - point de départ tiré entre 0 et 60 % du morceau (envoyé en fraction, le client calcule la position) ;
+  - l'audio de la manche N+1 est envoyé au début de l'écoute de la manche N (préchargement) ;
+  - après le compte à rebours, le serveur attend que chaque joueur signale son audio prêt, 10 s au maximum, puis démarre quand même ;
+  - quand tous les joueurs connectés ont trouvé, la révélation arrive tout de suite ;
+  - 5 musiques de rechange tirées en plus ; un audio qui ne charge pas est remplacé tant que la manche n'a pas commencé ;
+  - la vidéo n'est envoyée qu'à la révélation (son URL contient le nom de l'anime).
 
 ### Progressif (v1, façon Songspot)
 

@@ -10,11 +10,13 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "catalogue:sync": "tsx scripts/sync/index.ts",
-    "catalogue:check": "tsx scripts/check-catalogue.ts"
+    "catalogue:check": "tsx scripts/check-catalogue.ts",
+    "smoke": "tsx scripts/smoke-game.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.6",
+    "socket.io-client": "^4.8.4",
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "vitest": "^5.1.0"

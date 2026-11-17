@@ -7,6 +7,9 @@ coverage/
 !.env.example
 .DS_Store
 
+# Réglages Claude Code personnels
+.claude/settings.local.json
+
 # Catalogue SQLite généré par le script de synchro
 server/data/*.db
 server/data/*.db-*

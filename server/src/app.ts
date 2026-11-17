@@ -2,8 +2,12 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import { Server as SocketServer } from 'socket.io';
 import type { ClientToServerEvents, HealthResponse, ServerToClientEvents } from '@blindtest/shared';
+import { AudioRegistry } from './audio/AudioRegistry';
 import type { Catalogue } from './catalogue/Catalogue';
 import type { Config } from './config';
+import { GameManager } from './game/GameManager';
+import { registerGameHandlers, socketEmitter } from './game/socketHandlers';
+import { registerAudioRoutes } from './routes/audio';
 import { registerCatalogueRoutes } from './routes/catalogue';
 
 export type IoServer = SocketServer<ClientToServerEvents, ServerToClientEvents>;
@@ -11,6 +15,8 @@ export type IoServer = SocketServer<ClientToServerEvents, ServerToClientEvents>;
 export interface App {
   fastify: FastifyInstance;
   io: IoServer;
+  audio: AudioRegistry;
+  games: GameManager;
 }
 
 export interface AppOptions {
@@ -35,22 +41,27 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
     catalogueVersion: catalogue?.version ?? null,
   }));
 
+  const audio = new AudioRegistry();
   registerCatalogueRoutes(fastify, catalogue);
+  registerAudioRoutes(fastify, audio);
 
   const io: IoServer = new SocketServer(fastify.server, {
     cors: { origin: [...config.clientOrigins] },
   });
+  const games = new GameManager(catalogue, audio, (gameId) => socketEmitter(io, gameId));
 
   io.on('connection', (socket) => {
     socket.emit('welcome', { serverTime: Date.now() });
     socket.on('clock:ping', (ack) => {
       if (typeof ack === 'function') ack(Date.now());
     });
+    registerGameHandlers(socket, games);
   });
 
   fastify.addHook('onClose', async () => {
+    games.closeAll();
     await io.close();
   });
 
-  return { fastify, io };
+  return { fastify, io, audio, games };
 }
