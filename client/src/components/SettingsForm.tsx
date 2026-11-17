@@ -45,7 +45,7 @@ interface SettingsFormProps {
   onChange: (settings: GameSettings) => void;
   /** Lecture seule (joueurs d'une room qui ne sont pas l'hôte). */
   disabled?: boolean;
-  /** Modes proposés (la Playlist n'existe qu'en room). */
+  /** Modes proposés (les modes multi, Playlist et Enchères, n'existent qu'en room). */
   modes?: readonly GameModeId[];
 }
 

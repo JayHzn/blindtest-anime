@@ -42,6 +42,11 @@ export interface AnimeRow {
   coverUrl: string | null;
   /** Couleur dominante de la jaquette (ex. « #e4a15d »). */
   coverColor: string | null;
+  /**
+   * Indice du mode Enchères : public cible AniList (« Shounen »…) sinon genre
+   * (« Romance »…), en anglais tel qu'AniList le donne ; traduit par le client.
+   */
+  genre: string | null;
 }
 
 export interface ThemeRow {

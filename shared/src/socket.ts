@@ -7,6 +7,7 @@
  * dans le navigateur) ; le serveur en déduit un identifiant de joueur stable, ce
  * qui permet de retrouver sa partie ou sa room après une coupure.
  */
+import type { AuctionView } from './auction';
 import type { AnswerPayload } from './catalogue';
 import type {
   AnswerResult,
@@ -58,6 +59,8 @@ export interface ServerToClientEvents {
   'playlist:found': (payload: { found: number }) => void;
   /** Playlist : tout le monde a trouvé, il reste jusqu'à `endsAt` pour deviner qui a choisi la chanson. */
   'playlist:guessWindow': (payload: { endsAt: number }) => void;
+  /** Enchères : état de la manche (annonces, ordre de passage, extrait programmé…) à chaque changement. */
+  'auction:state': (payload: { round: number; view: AuctionView }) => void;
   /** Fin de la manche : réponse et résultats. */
   'round:reveal': (reveal: RoundReveal) => void;
   /** Fin de la partie. */
@@ -83,6 +86,10 @@ export interface ClientToServerEvents {
   'game:nextTier': (ack: (progress: TierProgress | null) => void) => void;
   /** Mode Progressif : abandonner la manche au dernier palier (0 point). */
   'game:giveUp': (ack: (progress: TierProgress | null) => void) => void;
+  /** Enchères : annonce secrète (index de `AUCTION.bidsMs`), modifiable jusqu'à la fin de l'annonce. */
+  'auction:bid': (payload: { bid: number }, ack: (ok: boolean) => void) => void;
+  /** Enchères : celui qui a la main réécoute l'extrait ; renvoie les réécoutes restantes (null : refusé). */
+  'auction:replay': (ack: (left: number | null) => void) => void;
   /** Quitte la partie en cours (solo). */
   'game:leave': () => void;
   /** L'audio de la manche (`url` reçue dans `round:prepare`) est préchargé et prêt à jouer. */

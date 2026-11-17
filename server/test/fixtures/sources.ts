@@ -196,6 +196,11 @@ export const sources: SyncSources = {
       popularity: 600_000,
       title: { romaji: 'Shingeki no Kyojin 3', english: 'Attack on Titan Season 3' },
       coverImage: { extraLarge: 'https://img.anili.st/media/99147.jpg', color: '#e4a15d' },
+      genres: ['Action', 'Drama', 'Fantasy', 'Mystery'],
+      tags: [
+        { name: 'Military', category: 'Setting-Universe', rank: 95 },
+        { name: 'Shounen', category: 'Demographic', rank: 91 },
+      ],
     },
     { id: 21, popularity: 900_000, title: { romaji: 'ONE PIECE', english: 'One Piece' } },
     { id: 21519, popularity: 800_000, title: { romaji: 'Kimi no Na wa.', english: 'Your Name.' } },

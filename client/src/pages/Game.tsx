@@ -2,6 +2,7 @@ import { MODE_TIMINGS, PLAYLIST, chooserPoints } from '@blindtest/shared';
 import { AppHeader } from '../components/AppHeader';
 import { Vinyl } from '../components/Vinyl';
 import { AnswerForm } from '../components/game/AnswerForm';
+import { AuctionStage } from '../components/game/AuctionStage';
 import { GameSidebar } from '../components/game/GameSidebar';
 import { RevealPanel } from '../components/game/RevealPanel';
 import { RoundDots } from '../components/game/RoundDots';
@@ -9,6 +10,7 @@ import { TierControls } from '../components/game/TierControls';
 import { TimerBar } from '../components/game/TimerBar';
 import { VolumeControl } from '../components/game/VolumeControl';
 import { Button } from '../components/ui/Button';
+import { auctionBadges } from '../game/auctionBadges';
 import type { GameSession, SessionState } from '../game/GameSession';
 import { useGameSession } from '../game/useGameSession';
 import { secondsLeft, useServerNow } from '../hooks/useServerNow';
@@ -29,6 +31,7 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
   const state = useGameSession(session);
   const now = useServerNow();
   const { phase } = state;
+  const auctionMode = state.settings.mode === 'auction';
 
   const quit = () => {
     if (window.confirm(t('game.quit.confirm'))) onQuit();
@@ -72,7 +75,11 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
           {phase === 'countdown' || phase === null ? (
             <CountdownStage state={state} now={now} />
           ) : null}
-          {phase === 'listening' ? (
+          {auctionMode &&
+          (phase === 'bidding' || phase === 'listening' || phase === 'answering') ? (
+            <AuctionStage session={session} state={state} now={now} />
+          ) : null}
+          {!auctionMode && phase === 'listening' ? (
             <ListeningStage session={session} state={state} now={now} />
           ) : null}
           {phase === 'reveal' && state.reveal ? (
@@ -86,7 +93,20 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
           ) : null}
         </main>
 
-        <GameSidebar players={state.players} you={state.you} history={state.history} />
+        <GameSidebar
+          players={state.players}
+          you={state.you}
+          history={state.history}
+          badges={
+            auctionMode && state.auction && phase !== 'reveal'
+              ? auctionBadges(
+                  state.auction,
+                  state.players.map((player) => player.id),
+                  t,
+                )
+              : undefined
+          }
+        />
       </div>
     </div>
   );

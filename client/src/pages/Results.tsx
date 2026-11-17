@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import type { SessionState } from '../game/GameSession';
 import { useI18n } from '../i18n/context';
+import { formatScore } from '../lib/score';
 import styles from './Results.module.css';
 
 type ResultsActions =
@@ -36,7 +37,7 @@ export function Results({ state, actions }: ResultsProps) {
           <h1 className={styles.title}>{t('results.title')}</h1>
           {interrupted ? <p className={styles.warning}>{t('results.audioUnavailable')}</p> : null}
           <div className={styles.score}>
-            <span className={styles.scoreValue}>{score}</span>
+            <span className={styles.scoreValue}>{formatScore(score)}</span>
             <span className={styles.scoreUnit}>{t('results.points')}</span>
           </div>
           <p className={styles.found}>
@@ -85,7 +86,7 @@ export function Results({ state, actions }: ResultsProps) {
                   <span className={styles.roundInfo}>
                     <span className={styles.roundTitle}>{player.pseudo}</span>
                   </span>
-                  <span className={styles.roundPoints}>{player.score}</span>
+                  <span className={styles.roundPoints}>{formatScore(player.score)}</span>
                 </li>
               ))}
             </ol>
@@ -113,7 +114,11 @@ export function Results({ state, actions }: ResultsProps) {
                         ' ',
                       )}
                     >
-                      {mine?.correct ? `+${mine.points}` : '—'}
+                      {mine?.correct
+                        ? `+${mine.points}`
+                        : mine && mine.points < 0
+                          ? formatScore(mine.points)
+                          : '—'}
                     </span>
                   </li>
                 );

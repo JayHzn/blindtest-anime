@@ -1,5 +1,6 @@
 import type { Socket } from 'socket.io';
 import {
+  isAuctionBid,
   sanitizePseudo,
   type ClientToServerEvents,
   type ServerToClientEvents,
@@ -88,6 +89,17 @@ export function registerSocketHandlers(socket: GameSocket, { games, rooms }: Man
       return;
     }
     ack(games.gameOf(playerId)?.guess(playerId, target) ?? false);
+  });
+
+  socket.on('auction:bid', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    const bid = (payload as { bid?: unknown } | null)?.bid;
+    ack(isAuctionBid(bid) ? (games.gameOf(playerId)?.bid(playerId, bid) ?? false) : false);
+  });
+
+  socket.on('auction:replay', (ack) => {
+    if (typeof ack !== 'function') return;
+    ack(games.gameOf(playerId)?.replay(playerId) ?? null);
   });
 
   socket.on('audio:ready', (payload) => {

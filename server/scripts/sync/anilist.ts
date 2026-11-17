@@ -6,12 +6,16 @@ export interface AnilistMedia {
   title: { romaji: string | null; english: string | null };
   /** Jaquette (repli de la vidéo à la révélation) et sa couleur dominante. */
   coverImage?: { extraLarge: string | null; color: string | null } | null;
+  /** Genres (ordre alphabétique) et tags : le public cible est un tag de catégorie « Demographic ». */
+  genres?: string[] | null;
+  tags?: { name: string; category: string | null; rank: number | null }[] | null;
 }
 
 const QUERY = `query ($ids: [Int]) {
   Page(perPage: 50) {
     media(id_in: $ids, type: ANIME) {
       id popularity title { romaji english } coverImage { extraLarge color }
+      genres tags { name category rank }
     }
   }
 }`;

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  minPlayers,
   sanitizeSettings,
   type GameSettings,
   type PlaylistRound,
@@ -56,6 +57,10 @@ export class GameManager {
     if (!settings) return { ok: false, error: 'invalid_settings' };
     // La Playlist ne se joue qu'en room, avec les chansons choisies.
     if ((settings.mode === 'playlist') !== Boolean(playlist)) {
+      return { ok: false, error: 'invalid_settings' };
+    }
+    // Enchères : multi uniquement (la room vérifie avant avec une erreur explicite).
+    if (settings.mode === 'auction' && players.length < minPlayers(settings.mode)) {
       return { ok: false, error: 'invalid_settings' };
     }
 

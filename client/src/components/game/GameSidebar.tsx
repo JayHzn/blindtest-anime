@@ -1,16 +1,31 @@
 import type { PlayerScore, RoundReveal } from '@blindtest/shared';
 import { useI18n } from '../../i18n/context';
 import { avatarColor } from '../../lib/avatar';
+import { formatScore } from '../../lib/score';
 import styles from './GameSidebar.module.css';
+
+export interface PlayerBadge {
+  label: string;
+  tone: 'ok' | 'wait' | 'hand' | 'ko';
+}
 
 interface GameSidebarProps {
   players: PlayerScore[];
   you: string;
   history: RoundReveal[];
+  /** Mode Enchères : état de chaque joueur dans la manche (a annoncé, a la main, 2ᵉ…). */
+  badges?: Record<string, PlayerBadge>;
 }
 
+const BADGE_CLASS: Record<PlayerBadge['tone'], string | undefined> = {
+  ok: styles.badgeOk,
+  wait: styles.badgeWait,
+  hand: styles.badgeHand,
+  ko: styles.badgeKo,
+};
+
 /** Score (classement en multi) et récapitulatif des manches jouées. */
-export function GameSidebar({ players, you, history }: GameSidebarProps) {
+export function GameSidebar({ players, you, history, badges }: GameSidebarProps) {
   const { t, lang } = useI18n();
   const me = players.find((player) => player.id === you);
 
@@ -39,13 +54,21 @@ export function GameSidebar({ players, you, history }: GameSidebarProps) {
                   {player.pseudo.charAt(0).toUpperCase()}
                 </span>
                 <span className={styles.name}>{player.pseudo}</span>
-                {player.found ? (
+                {badges?.[player.id] ? (
+                  <span className={[styles.badge, BADGE_CLASS[badges[player.id]!.tone]].join(' ')}>
+                    {badges[player.id]!.label}
+                  </span>
+                ) : player.found ? (
                   <span className={styles.found} title={t('game.found')}>
                     <span aria-hidden="true">✓</span>
                     <span className={styles.srOnly}>{t('game.found')}</span>
                   </span>
                 ) : null}
-                <span className={styles.points}>{player.score}</span>
+                <span
+                  className={[styles.points, player.score < 0 ? styles.negative : ''].join(' ')}
+                >
+                  {formatScore(player.score)}
+                </span>
               </li>
             ))}
           </ol>
@@ -72,7 +95,7 @@ export function GameSidebar({ players, you, history }: GameSidebarProps) {
                     {mine?.correct ? '✓' : '✗'}
                   </span>
                   <span className={styles.roundTitle}>{reveal.anime.title[lang]}</span>
-                  <span className={styles.roundPoints}>{mine?.points ?? 0}</span>
+                  <span className={styles.roundPoints}>{formatScore(mine?.points ?? 0)}</span>
                 </li>
               );
             })}

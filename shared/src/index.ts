@@ -1,4 +1,5 @@
 export * from './api';
+export * from './auction';
 export * from './catalogue';
 export * from './game';
 export * from './playlist';

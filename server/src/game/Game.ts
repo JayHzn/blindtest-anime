@@ -14,6 +14,7 @@ import {
   type GamePhase,
   type GameSettings,
   type GameSnapshot,
+  type LocalizedTitle,
   type ModeTiming,
   type PlayerRoundResult,
   type PlayerScore,
@@ -27,6 +28,7 @@ import {
 import { audioPath, videoPath, type MediaRegistry } from '../media/MediaRegistry';
 import type { Catalogue } from '../catalogue/Catalogue';
 import type { ThemeRow } from '../catalogue/types';
+import { AuctionRound } from './AuctionRound';
 
 type Events = ServerToClientEvents;
 
@@ -49,6 +51,8 @@ export const AUDIO_WAIT_MS = 10_000;
 export const ABANDON_GRACE_MS = 30_000;
 /** Le point de départ est tiré entre 0 et 60 % du morceau (il reste toujours de quoi écouter). */
 const START_RATIO_MAX = 0.6;
+/** Enchères : longueur maximale d'une proposition tapée, montrée aux autres joueurs. */
+const GUESS_MAX_LENGTH = 80;
 
 interface PlayerState {
   id: string;
@@ -84,6 +88,8 @@ interface RoundState {
   guesses: Map<string, string | null>;
   /** Playlist : fin de la fenêtre pour deviner, ouverte quand tout le monde a trouvé. */
   guessWindowEndsAt: number | null;
+  /** Mode Enchères : annonces, ordre de passage et réponses (créé à la fin du compte à rebours). */
+  auction: AuctionRound | null;
 }
 
 export interface GameOptions {
@@ -207,7 +213,7 @@ export class Game {
     const player = this.players.get(id);
     if (!player) return;
     player.connected = false;
-    this.afterPlayerLost(() => {
+    this.afterPlayerLost(id, () => {
       // Plus personne : on laisse un délai pour revenir avant d'arrêter la partie.
       this.clearAbandonTimer();
       this.abandonTimer = setTimeout(() => this.close(), ABANDON_GRACE_MS);
@@ -218,7 +224,7 @@ export class Game {
   leave(id: string): void {
     if (!this.players.delete(id)) return;
     this.dropChooser(id);
-    this.afterPlayerLost(() => this.close());
+    this.afterPlayerLost(id, () => this.close());
   }
 
   /** Playlist : les chansons pas encore jouées d'un joueur parti deviennent des chansons sans joueur. */
@@ -230,13 +236,19 @@ export class Game {
     });
   }
 
-  private afterPlayerLost(whenEmpty: () => void): void {
+  private afterPlayerLost(id: string, whenEmpty: () => void): void {
     if (this.closed) return;
     if (this.connectedPlayers().length === 0) {
       whenEmpty();
       return;
     }
     this.broadcastPlayers();
+    // Enchères : la main passe s'il l'avait, l'annonce se termine si les autres ont annoncé.
+    const auction = this.rounds[this.roundIndex]?.auction;
+    if (auction) {
+      auction.playerLost(id);
+      return;
+    }
     // Les joueurs restants n'attendent pas celui qui est parti.
     if (this.phase === 'listening' && this.everyoneDone()) this.onEveryoneDone();
     if (this.waitingForAudio && this.everyoneReady()) this.startListening();
@@ -270,6 +282,10 @@ export class Game {
       videoUrl: round?.videoToken ? videoPath(round.videoToken) : null,
       progress: this.isProgressive && round ? { ...this.progressOf(round, forPlayer) } : null,
       playlist: this.isPlaylist && round ? this.playlistView(round, forPlayer) : null,
+      auction:
+        round?.auction && this.phase !== 'reveal' && this.phase !== 'finished'
+          ? round.auction.view(forPlayer)
+          : null,
     };
   }
 
@@ -288,6 +304,10 @@ export class Game {
     const target = this.rounds[round];
     if (!player || !target || url !== audioPath(target.token)) return;
     player.ready.set(round, url);
+    if (this.isAuction) {
+      if (round === this.roundIndex) this.rounds[round]!.auction?.audioReady(playerId);
+      return;
+    }
     if (this.waitingForAudio && round === this.roundIndex && this.everyoneReady()) {
       this.startListening();
       return;
@@ -332,6 +352,12 @@ export class Game {
     const player = this.players.get(playerId);
     if (!player || !player.connected) return { accepted: false, reason: 'not_in_game' };
     const round = this.rounds[this.roundIndex]!;
+    // Enchères : seul celui qui a la main répond, une fois (arbitrage dans AuctionRound).
+    if (this.isAuction) {
+      return (
+        round.auction?.answer(playerId, payload) ?? { accepted: false, reason: 'not_listening' }
+      );
+    }
     if (this.isPlaylist && round.choosers.includes(playerId)) {
       return { accepted: false, reason: 'own_song' };
     }
@@ -443,6 +469,19 @@ export class Game {
     return true;
   }
 
+  /** Enchères : annonce secrète d'un joueur pendant la phase d'annonce. */
+  bid(playerId: string, bid: number): boolean {
+    const round = this.rounds[this.roundIndex];
+    if (!this.players.get(playerId)?.connected) return false;
+    return round?.auction?.bid(playerId, bid) ?? false;
+  }
+
+  /** Enchères : celui qui a la main réécoute l'extrait (réécoutes restantes, ou null). */
+  replay(playerId: string): number | null {
+    if (!this.players.get(playerId)?.connected) return null;
+    return this.rounds[this.roundIndex]?.auction?.replay(playerId) ?? null;
+  }
+
   private get isProgressive(): boolean {
     return this.settings.mode === 'progressive';
   }
@@ -498,6 +537,10 @@ export class Game {
       .every((player) => round.guesses.has(player.id));
   }
 
+  private get isAuction(): boolean {
+    return this.settings.mode === 'auction';
+  }
+
   private progressOf(round: RoundState, playerId: string): TierProgress {
     let progress = round.progress.get(playerId);
     if (!progress) {
@@ -543,6 +586,10 @@ export class Game {
   }
 
   private afterCountdown(): void {
+    if (this.isAuction) {
+      this.startAuction();
+      return;
+    }
     if (this.everyoneReady()) {
       this.startListening();
       return;
@@ -572,6 +619,79 @@ export class Game {
     // Préchargement de la manche suivante pendant l'écoute.
     if (!this.preparedRounds.has(this.roundIndex + 1)) this.emitPrepare(this.roundIndex + 1);
     this.schedule(this.timing.listenMs, () => this.endRound());
+  }
+
+  /**
+   * Enchères : l'annonce s'ouvre directement après le compte à rebours ; ses 8 s
+   * laissent à l'audio le temps de finir de charger (chaque extrait attend
+   * ensuite, au plus `audioWaitMs`, le son de celui qui a la main).
+   */
+  private startAuction(): void {
+    const index = this.roundIndex;
+    const round = this.rounds[index]!;
+    const anime = this.catalogue.getAnime(round.theme.animeId);
+    if (round.theme.videoUrl && !round.videoToken) {
+      round.videoToken = this.media.register(round.theme.videoUrl, 'video');
+    }
+    for (const player of this.connectedPlayers()) round.participants.add(player.id);
+    round.auction = new AuctionRound(
+      [...round.participants],
+      { type: round.theme.type, year: anime?.year ?? null, genre: anime?.genre ?? null },
+      round.videoToken ? videoPath(round.videoToken) : null,
+      {
+        isConnected: (id) => this.players.get(id)?.connected ?? false,
+        isAudioReady: (id) => this.players.get(id)?.ready.get(index) === audioPath(round.token),
+        schedule: (delayMs, action) => this.schedule(delayMs, action),
+        setPhase: (phase, endsAt) => {
+          this.phase = phase;
+          this.phaseEndsAt = endsAt;
+        },
+        broadcastState: () => {
+          for (const id of this.players.keys()) {
+            this.emitter.toPlayer(id, 'auction:state', {
+              round: index,
+              view: round.auction!.view(id),
+            });
+          }
+        },
+        isCorrect: (payload) => this.catalogue.validate(round.theme.id, payload).correct,
+        guessTitle: (payload) => this.guessTitle(payload),
+        addScore: (id, delta) => {
+          const player = this.players.get(id);
+          if (player) player.score += delta;
+          this.broadcastPlayers();
+        },
+        endRound: () => this.endRound(),
+      },
+      this.audioWaitMs,
+    );
+    // Préchargement de la manche suivante pendant celle-ci.
+    if (!this.preparedRounds.has(index + 1)) this.emitPrepare(index + 1);
+    round.auction.start();
+  }
+
+  /** Proposition d'un joueur telle qu'on l'affiche aux autres (titre choisi, ou texte tapé). */
+  private guessTitle(payload: AnswerPayload): LocalizedTitle {
+    const { pick } = payload;
+    if (pick?.kind === 'anime') {
+      const anime = this.catalogue.getAnime(pick.id);
+      if (anime) {
+        return {
+          fr: this.catalogue.animeTitle(anime, 'fr'),
+          en: this.catalogue.animeTitle(anime, 'en'),
+        };
+      }
+    } else if (pick?.kind === 'franchise') {
+      const franchise = this.catalogue.getFranchise(pick.id);
+      if (franchise) {
+        return {
+          fr: this.catalogue.franchiseTitle(franchise, 'fr'),
+          en: this.catalogue.franchiseTitle(franchise, 'en'),
+        };
+      }
+    }
+    const text = payload.text.replace(/\s+/g, ' ').trim().slice(0, GUESS_MAX_LENGTH) || '…';
+    return { fr: text, en: text };
   }
 
   /** Lance l'écoute pour un joueur (début commun, ou plus tard pour un retardataire). */
@@ -687,6 +807,7 @@ export class Game {
       choosers: [...choosers],
       guesses: new Map(),
       guessWindowEndsAt: null,
+      auction: null,
     };
   }
 
@@ -712,8 +833,10 @@ export class Game {
     const { theme } = round;
     const anime = this.catalogue.getAnime(theme.animeId)!;
     const franchise = this.catalogue.getFranchise(anime.franchiseId)!;
+    const { auction } = round;
     const results = [...this.players.values()].map(
       (player): PlayerRoundResult =>
+        auction?.resultFor(player.id) ??
         round.results.get(player.id) ?? {
           playerId: player.id,
           correct: false,
@@ -754,6 +877,7 @@ export class Game {
       },
       results,
       players: this.scoreboard(),
+      ...(auction && { auction: auction.turns() }),
     };
   }
 
@@ -808,7 +932,9 @@ export class Game {
         // Sa propre coche n'a rien de secret (et sert à la reconnexion).
         found:
           (!hideFound || player.id === forPlayer) &&
-          (round?.results.get(player.id)?.correct ?? false),
+          (round?.auction
+            ? round.auction.hasFound(player.id)
+            : (round?.results.get(player.id)?.correct ?? false)),
         connected: player.connected,
       }))
       .sort((a, b) => b.score - a.score);

@@ -10,6 +10,8 @@ interface Track {
 
 /** Délai maximal de préchargement avant de déclarer l'audio injouable. */
 const PRELOAD_TIMEOUT_MS = 15_000;
+/** Marge au-delà de la durée d'un extrait : un son bloqué (pas encore chargé) ne le fait pas durer sans fin. */
+const SNIPPET_STALL_MS = 2000;
 
 /**
  * Lecture des extraits : préchargement à l'avance, démarrage synchronisé
@@ -104,6 +106,7 @@ export class AudioPlayer {
     if (!track) return Promise.resolve();
     const { element } = track;
     const endAt = track.startTime + durationMs / 1000;
+    const giveUpAt = performance.now() + durationMs + SNIPPET_STALL_MS;
     element.currentTime = track.startTime;
     element.volume = this.volume;
     void element.play().catch(this.handlePlayError);
@@ -112,7 +115,7 @@ export class AudioPlayer {
       // Vérifié à chaque image : arrêt à la bonne position, à ~16 ms près.
       const watch = () => {
         if (token !== this.snippetToken) return resolve();
-        if (element.currentTime >= endAt || element.ended) {
+        if (element.currentTime >= endAt || element.ended || performance.now() > giveUpAt) {
           element.pause();
           return resolve();
         }

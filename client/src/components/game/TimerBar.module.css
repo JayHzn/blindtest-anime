@@ -14,3 +14,8 @@
   transform-origin: left center;
   will-change: transform;
 }
+
+/* Dernières secondes sous pression (mode Enchères). */
+.danger {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-danger));
+}

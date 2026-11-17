@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { PLAYLIST, ROOM_MAX_PLAYERS, ROOM_MODES, type GameSettings } from '@blindtest/shared';
+import { ROOM_MAX_PLAYERS, ROOM_MODES, minPlayers, type GameSettings } from '@blindtest/shared';
 import { AppHeader } from '../components/AppHeader';
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { SettingsForm } from '../components/SettingsForm';
@@ -29,9 +29,10 @@ export function Lobby({ session, onLeave }: LobbyProps) {
     (member) => member.connected && !member.isHost && !member.ready,
   );
   const { count, message } = useThemeCountMessage(room.settings);
+  // Playlist (3) et Enchères (2) : nombre minimal de joueurs connectés.
+  const required = minPlayers(room.settings.mode);
   const connected = room.members.filter((member) => member.connected).length;
-  const missingPlayers =
-    room.settings.mode === 'playlist' ? Math.max(0, PLAYLIST.minPlayers - connected) : 0;
+  const missingPlayers = Math.max(0, required - connected);
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,9 +155,7 @@ export function Lobby({ session, onLeave }: LobbyProps) {
                   {starting ? t('setup.starting') : t('room.start')}
                 </Button>
                 {missingPlayers > 0 ? (
-                  <p className={styles.hint}>
-                    {t('room.playlist.minPlayers', { n: PLAYLIST.minPlayers })}
-                  </p>
+                  <p className={styles.hint}>{t('room.playlist.minPlayers', { n: required })}</p>
                 ) : null}
                 {notReady.length > 0 ? (
                   <p className={styles.hint}>

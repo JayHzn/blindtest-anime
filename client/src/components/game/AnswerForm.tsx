@@ -11,10 +11,18 @@ interface AnswerFormProps {
   /** Incrémenté à chaque mauvaise réponse (déclenche l'animation). */
   wrongCount: number;
   onSubmit: (answer: AnswerPayload) => void;
+  /** Champ « N° OP/ED » et mention « Saison · +25 » (pas de bonus de précision en Enchères). */
+  bonuses?: boolean;
 }
 
 /** Champ de réponse avec autocomplétion locale (aucune requête réseau par frappe). */
-export function AnswerForm({ index, disabled, wrongCount, onSubmit }: AnswerFormProps) {
+export function AnswerForm({
+  index,
+  disabled,
+  wrongCount,
+  onSubmit,
+  bonuses = true,
+}: AnswerFormProps) {
   const { t, lang } = useI18n();
   const [text, setText] = useState('');
   const [sequence, setSequence] = useState('');
@@ -116,7 +124,7 @@ export function AnswerForm({ index, disabled, wrongCount, onSubmit }: AnswerForm
                   <span className={styles.optionTitle}>{entry[lang]}</span>
                   {entry.k === 'f' ? (
                     <span className={styles.tag}>{t('game.suggestion.franchise')}</span>
-                  ) : entry.s ? (
+                  ) : entry.s && bonuses ? (
                     <span className={[styles.tag, styles.tagSeason].join(' ')}>
                       {t('game.suggestion.season')} · +25
                     </span>
@@ -128,25 +136,27 @@ export function AnswerForm({ index, disabled, wrongCount, onSubmit }: AnswerForm
         </div>
       </div>
 
-      <div className={styles.sequence}>
-        <label htmlFor={sequenceId}>{t('game.sequence.label')}</label>
-        <input
-          id={sequenceId}
-          className={styles.sequenceInput}
-          inputMode="numeric"
-          maxLength={3}
-          value={sequence}
-          disabled={disabled}
-          onChange={(event) => setSequence(event.target.value.replace(/\D/g, ''))}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <span className={styles.sequenceHint}>{t('game.sequence.hint')}</span>
-      </div>
+      {bonuses ? (
+        <div className={styles.sequence}>
+          <label htmlFor={sequenceId}>{t('game.sequence.label')}</label>
+          <input
+            id={sequenceId}
+            className={styles.sequenceInput}
+            inputMode="numeric"
+            maxLength={3}
+            value={sequence}
+            disabled={disabled}
+            onChange={(event) => setSequence(event.target.value.replace(/\D/g, ''))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                submit();
+              }
+            }}
+          />
+          <span className={styles.sequenceHint}>{t('game.sequence.hint')}</span>
+        </div>
+      ) : null}
     </form>
   );
 }

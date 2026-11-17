@@ -1,7 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { buildCatalogueData } from '../scripts/sync/map';
+import { buildCatalogueData, pickGenre } from '../scripts/sync/map';
 import { parseFrenchLabel } from '../src/catalogue/titles';
 import { sources } from './fixtures/sources';
+
+describe('pickGenre (indice du mode Enchères)', () => {
+  const media = (
+    genres: string[],
+    tags: { name: string; category: string; rank: number }[] = [],
+  ) => ({
+    id: 1,
+    popularity: 1,
+    title: { romaji: null, english: null },
+    genres,
+    tags,
+  });
+
+  it('prend le public cible quand AniList le juge pertinent', () => {
+    expect(
+      pickGenre(media(['Action'], [{ name: 'Seinen', category: 'Demographic', rank: 80 }])),
+    ).toBe('Seinen');
+  });
+
+  it('ignore un public cible peu pertinent et prend le genre le plus parlant', () => {
+    const anime = media(
+      ['Action', 'Comedy', 'Sports'],
+      [{ name: 'Shounen', category: 'Demographic', rank: 40 }],
+    );
+    expect(pickGenre(anime)).toBe('Sports');
+  });
+
+  it('sans donnée AniList : pas de genre', () => {
+    expect(pickGenre(undefined)).toBeNull();
+    expect(pickGenre(media([]))).toBeNull();
+  });
+
+  it('est enregistré dans le catalogue', () => {
+    const data = buildCatalogueData(sources);
+    expect(data.anime.find((a) => a.id === 101)?.genre).toBe('Shounen');
+    expect(data.anime.find((a) => a.id === 200)?.genre).toBeNull();
+  });
+});
 
 const data = buildCatalogueData(sources);
 const theme = (id: number) => data.themes.find((t) => t.id === id);

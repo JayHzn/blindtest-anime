@@ -10,7 +10,7 @@ Le blindtest des openings et endings d'anime, à jouer seul ou entre potes.
 
 ### Réglages
 
-- **Mode** : Classique ou Progressif, et en room Playlist des joueurs (voir plus bas).
+- **Mode** : Classique ou Progressif, et en room Playlist des joueurs ou Enchères (voir plus bas).
 - **Manches** : 5, 10, 15 ou 20 (en Playlist des joueurs : nombre de chansons par joueur, de 1 à 10).
 - **Popularité** : Top 100, Top 500, Top 2000 ou tout le catalogue (selon le nombre de fans sur AniList).
 - **Types** : openings, endings, ou les deux.
@@ -55,6 +55,27 @@ Chacun choisit des chansons en secret, puis tout le monde essaie de les trouver.
 5. **Révélation** : on découvre qui l'avait choisie et combien de joueurs l'ont trouvée.
 
 Pendant la manche, tu vois combien de joueurs ont trouvé, mais pas lesquels, pour ne pas trahir celui qui a choisi la chanson. Lui voit tout en direct.
+
+### Enchères (à partir de 2 joueurs)
+
+Combien de temps te faut-il pour reconnaître la chanson ? Le plus audacieux tente sa chance.
+
+1. **L'indice** : le type, l'année et le genre de l'anime s'affichent (ex. « ED · 2009 · Shōnen »).
+2. **L'annonce** : en 8 secondes, chacun annonce en secret la durée d'extrait qu'il lui faut. Tu vois qui a annoncé, jamais combien. Tu peux changer d'avis jusqu'à la fin ; si tu n'annonces rien, tu regardes la manche.
+3. **La main** : l'annonce la plus courte a la main. En cas d'égalité, c'est celui qui a annoncé le premier.
+4. **L'écoute** : tout le monde entend l'extrait de la durée annoncée.
+5. **La réponse** : seul celui qui a la main répond, **un seul essai, 10 secondes**. Il peut réécouter l'extrait 3 fois (lui seul l'entend).
+
+| Annonce          | 0,5 s | 1 s  | 3 s | 5 s | 10 s |
+| ---------------- | ----- | ---- | --- | --- | ---- |
+| Bonne réponse    | 300   | 250  | 200 | 100 | 50   |
+| Mauvaise réponse | −150  | −100 | −75 | −50 | −25  |
+
+- **Bonne réponse** : les points de ton annonce, et la manche se termine.
+- **Mauvaise réponse, ou pas de réponse dans les 10 secondes** : tu perds les points indiqués, ta proposition s'affiche pour tout le monde, et la main passe à l'annonce suivante, qui réentend l'extrait à sa durée (plus longue).
+- Pendant la réponse, la pénalité en jeu s'affiche en gros chez tout le monde : « −150 si tu te trompes ».
+- Si tout le monde se trompe, la réponse est révélée et chacun garde sa pénalité. Ton score peut devenir négatif.
+- Pas de bonus de précision dans ce mode : seul le nom de l'anime compte.
 
 ## Les réponses
 

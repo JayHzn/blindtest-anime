@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { normalize, PROGRESSIVE, type RoundReveal } from '@blindtest/shared';
+import {
+  AUCTION,
+  normalize,
+  PROGRESSIVE,
+  type PlayerRoundResult,
+  type RoundReveal,
+} from '@blindtest/shared';
 import type { GameSession } from '../../game/GameSession';
 import { secondsLeft, useServerNow } from '../../hooks/useServerNow';
 import { useI18n } from '../../i18n/context';
@@ -110,7 +116,9 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
         {reveal.playlist ? <PlaylistBanner reveal={reveal} you={you} /> : null}
 
         <div className={styles.footer}>
-          {mine?.playlist?.ownSong ? (
+          {mine?.auction ? (
+            <AuctionOutcome result={mine} />
+          ) : mine?.playlist?.ownSong ? (
             <span className={[styles.result, styles.own].join(' ')}>
               +{mine.points} · {t('playlist.reveal.ownSong')}
             </span>
@@ -215,5 +223,38 @@ function PlaylistBanner({ reveal, you }: { reveal: RoundReveal; you: string }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Mode Enchères : ce que l'annonce du joueur lui a rapporté (ou coûté). */
+function AuctionOutcome({ result }: { result: PlayerRoundResult }) {
+  const { t, lang } = useI18n();
+  const { bid, status } = result.auction!;
+  if (bid === null) {
+    return (
+      <span className={[styles.result, styles.missed].join(' ')}>
+        {t('game.reveal.auctionNoBid')}
+      </span>
+    );
+  }
+  const s = t('game.seconds', { s: ((AUCTION.bidsMs[bid] ?? 0) / 1000).toLocaleString(lang) });
+  if (status === 'found') {
+    return (
+      <span className={[styles.result, styles.found].join(' ')}>
+        +{result.points} · {t('game.reveal.auctionFound', { s })}
+      </span>
+    );
+  }
+  if (result.points < 0) {
+    return (
+      <span className={[styles.result, styles.missed].join(' ')}>
+        {t('game.reveal.auctionWrong', { s, n: `−${-result.points}` })}
+      </span>
+    );
+  }
+  return (
+    <span className={[styles.result, styles.missed].join(' ')}>
+      {t('game.reveal.auctionWaiting', { s })}
+    </span>
   );
 }

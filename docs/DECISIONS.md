@@ -18,6 +18,7 @@ Validé le 2026-11-17.
 - **Catalogue SQLite généré au build** (lecture seule) :
   - source : API **GraphQL** AnimeThemes (`https://rs.animethemes.moe/graphql`, 90 req/min) — l'ancienne API JSON:API (`api.animethemes.moe`) est dépréciée et ne répond plus ;
   - popularité : AniList (via les mappings externes d'AnimeThemes)
+  - genre (indice du mode Enchères) : public cible AniList (tag « Demographic » : Shōnen, Seinen, Shōjo, Josei, Jeunesse) s'il est pertinent à 60 % ou plus, sinon le genre AniList le plus parlant (Mecha, Sport, Musique… avant Action ou Aventure, qu'AniList liste par ordre alphabétique). Au 2026-11-17 : 4 891 animes sur 4 900 ont un genre. Un ancien catalogue sans la colonne reste lisible (indice sans genre).
   - titres français : Wikidata (propriété P8729 = ID AniList ; P179 = série parente), libellés « saison N de X » reformulés en « X — Saison N »
   - franchise = la plus grande série AnimeThemes de l'anime, sinon l'anime seul ;
   - musique retenue par thème : version originale (pas de groupe doublage), première version non NSFW, vidéo préférée sans scènes d'épisode, sans crédits, en 720p ;
@@ -149,6 +150,38 @@ Validé le 2026-11-17 (maquette : https://claude.ai/artifact/2uaSVC9K12YCnM4VXEi
   - seul le joueur qui a choisi la chanson voit qui la trouve ;
   - le bonus « Chanson d'un joueur » n'est ajouté qu'à la révélation (sinon il indiquerait si la chanson a été tirée au hasard).
 - **Départs** : déconnexion, le joueur garde ses points et ses chansons ; départ volontaire pendant le choix, ses chansons sont retirées ; départ pendant la partie, ses chansons restantes sont jouées comme des chansons sans joueur.
+
+### Enchères (v2, multi uniquement)
+
+Validé le 2026-11-17 (maquette : https://claude.ai/artifact/XcACCcnxgKHnBmUUtSfJ5u).
+
+- **Principe** : chacun annonce en secret la durée d'extrait qu'il lui faut ; l'annonce la plus courte a la main et répond seule.
+- **2 joueurs minimum** au lancement. 10 manches par défaut, réglable comme ailleurs.
+- **Indice** affiché avant l'annonce : Type · Année · Genre (ex. « ED · 2009 · Shōnen »), voir « Catalogue » pour le genre.
+- **Annonce** secrète et simultanée, 8 s : 0,5 / 1 / 3 / 5 / 10 s.
+  - on voit qui a annoncé, jamais la durée ; l'annonce se termine dès que tout le monde a annoncé ;
+  - on peut changer d'avis pendant les 8 s : l'horodatage est celui de la dernière annonce (pas d'annonce prudente rapide changée au dernier moment) ;
+  - pas d'annonce : le joueur ne joue pas la manche (0 point, pas de pénalité) ; personne n'annonce : révélation directe.
+- **Ordre de passage** : l'annonce la plus courte d'abord ; à égalité, celui qui a annoncé le premier (horodatage serveur). Affiché 1,5 s avant le premier extrait.
+- **Écoute** : tout le monde entend l'extrait de la durée annoncée par celui qui a la main.
+- **Réponse** : lui seul répond, **1 essai, 10 s** après la fin de l'extrait ; il peut **réécouter 3 fois au maximum** (lui seul entend ces réécoutes, le chrono continue).
+- **Barème** :
+  - bonne réponse : **300 / 250 / 200 / 100 / 50** selon l'annonce, et fin de manche ;
+  - mauvaise réponse : **−150 / −100 / −75 / −50 / −25** ; la main passe à l'annonce suivante, et l'extrait est rejoué à sa durée (2 s de pause pour voir l'erreur) ;
+  - silence pendant les 10 s : compte comme une erreur (même pénalité) ;
+  - pas de bonus de précision (un seul champ : l'anime) ;
+  - les scores peuvent devenir négatifs.
+- **Tout le monde s'est trompé** : révélation directe, chacun garde sa pénalité.
+- **Pression à l'écran** : pendant la réponse, la pénalité en jeu s'affiche en gros chez tous (« −150 si tu te trompes » / « −150 si Kevin se trompe »).
+- **Mauvaise réponse montrée à tous** (proposition barrée et pénalité) : ce n'est jamais la bonne réponse, rien n'est révélé.
+- **Départs** : celui qui a la main se déconnecte, la main passe sans pénalité ; un joueur absent à son tour est sauté ; un joueur arrivé en cours de manche regarde et joue à la suivante.
+- Détails (mise en œuvre) :
+  - états serveur : ANNONCE (`bidding`) → ÉCOUTE (`listening`) → RÉPONSE (`answering`) → (joueur suivant) → RÉVÉLATION ; tout est arbitré par le serveur (annonces, ordre, chrono, points), dans `AuctionRound`, branché sur le moteur commun ;
+  - chaque joueur reçoit sa vue de la manche (`auction:state`) à chaque changement, et dans `game:state` à la reconnexion : les annonces des autres restent secrètes jusqu'à la fin de l'annonce, rien ne révèle la réponse avant la révélation ;
+  - même mécanisme que le Progressif : le navigateur coupe l'extrait à la bonne durée (vérifié : 0,5 s et 1 s jouées à ~5 ms près) ;
+  - chaque extrait part à une **heure de départ commune** fixée par le serveur (0,5 s d'avance au moins), avec la correction d'horloge du multi (vérifié : 0 à 12 ms d'écart entre deux navigateurs) ; un extrait bloqué (son pas chargé) s'arrête au plus tard 2 s après sa durée ;
+  - préchargement inchangé : la chanson suivante part au début de l'annonce ; l'extrait attend le son de celui qui a la main 3 s au maximum, puis part quand même ;
+  - la vidéo de révélation se précharge dès l'annonce et reprend là où le dernier extrait s'est arrêté.
 
 ### Feuille de route
 

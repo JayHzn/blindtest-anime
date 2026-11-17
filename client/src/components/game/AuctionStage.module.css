@@ -1,0 +1,539 @@
+/* Mode Enchères — d'après la maquette Pastel Sakura validée (annonce, pression, vue des autres). */
+
+.stage {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+
+.caption {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+/* ── Indice ── */
+.hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hintLabel {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.chip {
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-3);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  animation: pop 0.4s var(--ease-out) both;
+}
+
+.chipType {
+  color: var(--color-accent);
+}
+
+.chipYear {
+  color: var(--color-peach);
+  animation-delay: 80ms;
+}
+
+.chipGenre {
+  color: var(--color-lavender);
+  animation-delay: 160ms;
+}
+
+.hintSmall .chip {
+  padding: 6px 14px;
+  font-size: 15px;
+  animation: none;
+}
+
+/* ── Chrono ── */
+.timer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.timerLabels {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.seconds {
+  color: var(--color-text-muted);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timerIdle {
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-3);
+}
+
+/* ── Annonce ── */
+.bids {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 6px 14px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.15s var(--ease-out),
+    background 0.15s;
+}
+
+.bid:hover {
+  background: var(--color-surface-3);
+  transform: translateY(-2px);
+}
+
+.bid:focus-visible {
+  outline: 3px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.bidSelected {
+  border-color: var(--color-accent);
+  background: rgb(255 158 199 / 0.12);
+  box-shadow: var(--shadow-glow);
+}
+
+.bidDuration {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.bidSelected .bidDuration {
+  color: var(--color-accent);
+}
+
+.bidGain {
+  color: var(--color-mint);
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.bidRisk {
+  color: var(--color-danger);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.sent {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.sent strong {
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.legend {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+/* ── La pression ── */
+.stakes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.penalty {
+  color: var(--color-danger);
+  font-family: var(--font-display);
+  font-size: clamp(72px, 12vw, 128px);
+  font-weight: 700;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 40px rgb(255 138 154 / 0.35);
+  animation:
+    pop 0.5s var(--ease-out),
+    throb 1s var(--ease-out) 0.5s infinite;
+}
+
+.stakesIf {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 600;
+}
+
+.gain {
+  margin-top: var(--space-2);
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  background: rgb(143 240 200 / 0.14);
+  color: var(--color-mint);
+  font-weight: 800;
+}
+
+.stakesWatch .penalty {
+  font-size: clamp(60px, 9vw, 100px);
+  animation: pop 0.5s var(--ease-out);
+}
+
+.replay {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 18px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-3);
+  color: var(--color-lavender);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.replay:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.replay:focus-visible {
+  outline: 3px solid var(--color-lavender);
+  outline-offset: 2px;
+}
+
+.replay em {
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* ── Vue des autres ── */
+.holder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.holderAvatar {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: 0 0 0 6px rgb(255 158 199 / 0.2);
+  color: var(--color-bg);
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  animation: pop 0.4s var(--ease-out);
+}
+
+.holderName {
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.holderName span {
+  color: var(--color-accent);
+}
+
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: blink 1.2s infinite;
+}
+
+.typing i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.toast {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 18px;
+  border: 1px solid rgb(255 138 154 / 0.35);
+  border-radius: var(--radius-pill);
+  background: rgb(255 138 154 / 0.12);
+  font-weight: 700;
+  animation: pop 0.4s var(--ease-out);
+}
+
+.toast s {
+  color: var(--color-danger);
+}
+
+.toast b {
+  color: var(--color-danger);
+  font-variant-numeric: tabular-nums;
+}
+
+.order {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.orderLabel {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.orderList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turn {
+  display: grid;
+  grid-template-columns: 24px 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+}
+
+.turnNow {
+  outline: 2px solid var(--color-accent);
+  background: rgb(255 158 199 / 0.12);
+}
+
+.turnOut {
+  opacity: 0.6;
+}
+
+.turnRank {
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-align: center;
+}
+
+.turnAvatar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-bg);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.turnWho {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.turnWho b,
+.turnWho small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turnWho small {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.turnWho small.turnGuess {
+  color: var(--color-danger);
+  text-decoration: line-through;
+}
+
+.turnDuration {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.turnNow .turnDuration {
+  color: var(--color-accent);
+}
+
+.yourTurn {
+  margin: 0;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+/* ── Fin de manche ── */
+.outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  animation: pop 0.5s var(--ease-out);
+}
+
+.outcomePoints {
+  color: var(--color-mint);
+  font-family: var(--font-display);
+  font-size: 72px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.outcomeLabel {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes throb {
+  50% {
+    transform: scale(1.04);
+    text-shadow: 0 0 64px rgb(255 138 154 / 0.55);
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .penalty,
+  .typing i,
+  .chip,
+  .holderAvatar,
+  .toast,
+  .outcome {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .stage {
+    gap: var(--space-4);
+  }
+
+  .bids {
+    gap: 6px;
+  }
+
+  .bid {
+    padding: 12px 2px 10px;
+    border-radius: var(--radius-sm);
+  }
+
+  .bidDuration {
+    font-size: 19px;
+  }
+
+  .bidGain {
+    font-size: 13px;
+  }
+
+  .bidRisk {
+    font-size: 11px;
+  }
+
+  .chip {
+    padding: 8px 14px;
+    font-size: 18px;
+  }
+
+  .timerLabels {
+    font-size: 17px;
+  }
+}

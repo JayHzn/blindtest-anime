@@ -16,20 +16,7 @@ Ce qui ne nous différencie PAS : multi temps réel, filtres, révélation vidé
 
 ## Concepts validés
 
-Le mode Playlist des joueurs est passé dans DECISIONS.md (v2).
-
-### Mode Enchères
-
-- **Indice affiché avant l'annonce** : Type · Année · Genre (ex. « ED · 2009 · Shōnen »).
-- **Annonce secrète et simultanée** (8 s) : 0,5 s · 1 s · 3 s · 5 s · 10 s.
-- **Ordre** : l'annonce la plus courte a la main ; en cas d'égalité, le premier à avoir annoncé (horodatage serveur).
-- **Écoute** : tout le monde entend l'extrait de la durée annoncée. Seul ce joueur répond, 1 essai, 10 s.
-- **Bonne réponse** : points selon l'audace (0,5 s = 300 … 10 s = 50), fin de manche.
-- **Mauvaise réponse** :
-  - pénalité proportionnelle à l'audace (−150 à 0,5 s … −25 à 10 s) ;
-  - la main passe à l'annonce suivante, qui réentend l'extrait à sa durée (plus longue).
-- **Pression à l'écran** : pendant la réponse, afficher en gros la pénalité en jeu (« −150 si tu te trompes »).
-- Serveur : suite d'états ANNONCE → ÉCOUTE → RÉPONSE → (suivant) → RÉVÉLATION sur le moteur arbitre existant.
+Les modes Playlist des joueurs et Enchères sont passés dans DECISIONS.md (v2).
 
 ### Mode Soirée (style Kahoot)
 

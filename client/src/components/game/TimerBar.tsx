@@ -7,13 +7,15 @@ interface TimerBarProps {
   endsAt: number;
   /** Durée totale de la phase, pour la proportion de départ. */
   durationMs: number;
+  /** Jauge rouge (dernières secondes sous pression). */
+  danger?: boolean;
 }
 
 /**
  * Jauge qui se vide jusqu'à `endsAt`. Animée par une transition CSS
  * (une seule mise à jour, pas de rendu React à chaque image).
  */
-export function TimerBar({ endsAt, durationMs }: TimerBarProps) {
+export function TimerBar({ endsAt, durationMs, danger = false }: TimerBarProps) {
   const fill = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -29,7 +31,7 @@ export function TimerBar({ endsAt, durationMs }: TimerBarProps) {
 
   return (
     <div className={styles.track} aria-hidden="true">
-      <div ref={fill} className={styles.fill} />
+      <div ref={fill} className={[styles.fill, danger ? styles.danger : ''].join(' ')} />
     </div>
   );
 }

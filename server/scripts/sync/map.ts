@@ -98,6 +98,48 @@ function mostFrequent(values: string[]): string | null {
   return best;
 }
 
+/** Public cible retenu s'il est jugé pertinent par AniList (rang du tag, en %). */
+const DEMOGRAPHIC_MIN_RANK = 60;
+
+/**
+ * Genres AniList, du plus parlant au plus courant : AniList les liste par ordre
+ * alphabétique, ce qui donnerait « Action » à la moitié du catalogue.
+ */
+const GENRE_PRIORITY = [
+  'Mahou Shoujo',
+  'Mecha',
+  'Sports',
+  'Music',
+  'Horror',
+  'Slice of Life',
+  'Psychological',
+  'Mystery',
+  'Thriller',
+  'Romance',
+  'Ecchi',
+  'Sci-Fi',
+  'Supernatural',
+  'Fantasy',
+  'Drama',
+  'Comedy',
+  'Adventure',
+  'Action',
+];
+
+/**
+ * Genre affiché dans l'indice du mode Enchères : le public cible (Shounen, Seinen,
+ * Shoujo, Josei, Kids) quand AniList le donne, sinon le genre le plus parlant.
+ */
+export function pickGenre(media: AnilistMedia | undefined): string | null {
+  if (!media) return null;
+  const demographic = (media.tags ?? [])
+    .filter((tag) => tag.category === 'Demographic' && (tag.rank ?? 0) >= DEMOGRAPHIC_MIN_RANK)
+    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))[0];
+  if (demographic) return demographic.name;
+  const genres = new Set(media.genres ?? []);
+  return GENRE_PRIORITY.find((genre) => genres.has(genre)) ?? null;
+}
+
 /** Assemble les sources (AnimeThemes, AniList, Wikidata) en un catalogue. */
 export function buildCatalogueData(sources: SyncSources): CatalogueData {
   const anilistById = new Map(sources.anilist.map((media) => [media.id, media]));
@@ -178,6 +220,7 @@ export function buildCatalogueData(sources: SyncSources): CatalogueData {
       popularityRank: 0,
       coverUrl: media?.coverImage?.extraLarge ?? null,
       coverColor: media?.coverImage?.color ?? null,
+      genre: pickGenre(media),
     });
 
     const animeTitles = [

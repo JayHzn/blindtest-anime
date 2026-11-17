@@ -3,6 +3,7 @@ import {
   MODE_TIMINGS,
   PROGRESSIVE,
   type AnswerPayload,
+  type AuctionView,
   type GameEnd,
   type GamePhase,
   type GameSnapshot,
@@ -73,10 +74,12 @@ export interface SessionState {
   answer: AnswerFeedback;
   /** Mode Progressif : palier et essais restants du joueur pour la manche. */
   progress: TierProgress;
-  /** Un extrait est en cours de lecture (mode Progressif). */
+  /** Un extrait est en cours de lecture (modes Progressif et Enchères). */
   snippetPlaying: boolean;
   /** Mode Playlist : rôle, compteur, pari. */
   playlist: PlaylistState;
+  /** Mode Enchères : manche en cours (annonces, ordre de passage, extrait programmé). */
+  auction: AuctionView | null;
   /** Le navigateur a bloqué le son (pas de clic depuis le chargement de la page). */
   soundBlocked: boolean;
   end: GameEnd | null;
@@ -103,6 +106,9 @@ export class GameSession {
   private pendingResume: { round: number; startedAt: number } | null = null;
   /** Début d'écoute de la manche en cours, pour relancer l'extrait au bon endroit. */
   private listenStart: { round: number; startedAt: number } | null = null;
+  /** Enchères : extrait déjà programmé (« manche:tour »), et sa minuterie. */
+  private scheduledSnippet: string | null = null;
+  private snippetTimer: number | null = null;
   private disposed = false;
 
   constructor(
@@ -128,6 +134,7 @@ export class GameSession {
       progress: INITIAL_PROGRESS,
       snippetPlaying: false,
       playlist: NO_PLAYLIST,
+      auction: null,
       soundBlocked: false,
       end: null,
       previousBest: null,
@@ -147,6 +154,7 @@ export class GameSession {
           playlist: { ...this.state.playlist, guessWindowEndsAt: endsAt },
         }),
       'game:players': (players) => this.update({ players }),
+      'auction:state': ({ round, view }) => this.onAuctionState(round, view),
       'round:reveal': (reveal) => this.onReveal(reveal),
       'game:end': (end) => this.onEnd(end),
     };
@@ -206,6 +214,7 @@ export class GameSession {
   }
 
   async submitAnswer(payload: AnswerPayload): Promise<void> {
+    if (this.isAuction) return this.submitAuctionAnswer(payload);
     if (this.state.phase !== 'listening' || !this.canAnswer()) return;
     const round = this.state.round;
     const wrongCount = this.state.answer.wrongCount;
@@ -244,6 +253,35 @@ export class GameSession {
     } else {
       this.update({ answer: { status: 'idle', wrongCount } });
     }
+  }
+
+  /** Enchères : annonce secrète (index de `AUCTION.bidsMs`), modifiable pendant l'annonce. */
+  async bid(bid: number): Promise<void> {
+    const { auction, round } = this.state;
+    if (!auction || auction.step !== 'bidding') return;
+    // Affichée tout de suite ; le serveur confirme avec le nouvel état.
+    this.update({ auction: { ...auction, yourBid: bid } });
+    const ok = await socket
+      .timeout(5000)
+      .emitWithAck('auction:bid', { bid })
+      .catch(() => false);
+    if (!ok && !this.disposed && this.state.round === round && this.state.auction) {
+      this.update({ auction: { ...this.state.auction, yourBid: auction.yourBid } });
+    }
+  }
+
+  /** Enchères : celui qui a la main réécoute son extrait (lui seul, 3 fois au plus). */
+  async replayAuction(): Promise<void> {
+    const { auction, round } = this.state;
+    const snippet = auction?.snippet;
+    if (!auction || !snippet || auction.step !== 'answering' || auction.replaysLeft <= 0) return;
+    const left = await socket
+      .timeout(5000)
+      .emitWithAck('auction:replay')
+      .catch(() => null);
+    if (left === null || this.disposed || this.state.round !== round || !this.state.auction) return;
+    this.update({ auction: { ...this.state.auction, replaysLeft: left } });
+    void this.playSnippet(snippet.durationMs);
   }
 
   /** Mode Progressif : réécouter l'extrait du palier en cours. */
@@ -326,6 +364,7 @@ export class GameSession {
     this.disposed = true;
     if (this.kind === 'solo' && this.state.status === 'playing') socket.emit('game:leave');
     this.detach();
+    this.clearSnippetTimer();
     this.audio.stopAll();
     this.video.release();
   }
@@ -363,7 +402,9 @@ export class GameSession {
       answer: found
         ? { status: 'correct', wrongCount: 0, points: 0, seasonExact: false, sequenceExact: false }
         : { status: 'idle', wrongCount: 0 },
+      auction: null,
     });
+    if (snapshot.auction) this.onAuctionState(snapshot.round, snapshot.auction);
     if (snapshot.phase === 'listening' && snapshot.listenStartedAt !== null) {
       this.pendingResume = { round: snapshot.round, startedAt: snapshot.listenStartedAt };
       this.video.preload(snapshot.round, snapshot.videoUrl);
@@ -373,6 +414,7 @@ export class GameSession {
   private onCountdown(round: number, phaseEndsAt: number): void {
     this.audio.fadeOut(this.state.round);
     this.video.release();
+    this.clearSnippetTimer();
     this.update({
       phase: 'countdown',
       round,
@@ -384,6 +426,7 @@ export class GameSession {
       playlist: NO_PLAYLIST,
       // Nouvelle manche : les coches « a trouvé » de la précédente disparaissent.
       players: this.state.players.map((player) => ({ ...player, found: false })),
+      auction: null,
     });
     // Cloche « attention », puis un tic à chaque seconde restante.
     sfx.bell();
@@ -420,6 +463,83 @@ export class GameSession {
       // La vidéo se précharge à l'endroit où l'extrait sera à la fin de l'écoute.
       const listenS = MODE_TIMINGS.classic.listenMs / 1000;
       this.video.preload(round, videoUrl, startTime + listenS - 1);
+    }
+  }
+
+  /**
+   * Enchères : nouvel état de la manche. Chaque extrait est joué par tous les
+   * navigateurs à l'heure serveur fixée (`snippet.startsAt`).
+   */
+  private onAuctionState(round: number, view: AuctionView): void {
+    if (round !== this.state.round) return;
+    const previous = this.state.auction;
+    const phase =
+      view.step === 'bidding' ? 'bidding' : view.step === 'answering' ? 'answering' : 'listening';
+    this.update({
+      auction: view,
+      phase: view.step === 'done' ? this.state.phase : phase,
+      phaseEndsAt: view.step === 'bidding' ? view.biddingEndsAt : (view.snippet?.answerEndsAt ?? 0),
+    });
+
+    // Vidéo de la révélation : préchargée dès l'annonce, au point de départ de l'extrait.
+    if (!previous && this.video.get(round) === null) {
+      this.video.preload(round, view.videoUrl, this.audio.startTime(round) ?? 0);
+    }
+
+    // Erreur ou bonne réponse de celui qui avait la main : effet sonore pour tous.
+    for (const turn of view.order) {
+      const before = previous?.order.find((entry) => entry.playerId === turn.playerId)?.status;
+      if (before === turn.status || !previous || previous.order.length === 0) continue;
+      if (turn.status === 'found') sfx.correct();
+      else if (turn.status === 'wrong' || turn.status === 'silent') sfx.wrong();
+    }
+
+    const { snippet } = view;
+    if (!snippet) return;
+    const key = `${round}:${snippet.turn}`;
+    if (key === this.scheduledSnippet) return;
+    this.scheduledSnippet = key;
+    this.clearSnippetTimer();
+    const delay = snippet.startsAt - serverNow();
+    // Arrivé après le début de l'extrait (reconnexion) : on ne le rattrape pas.
+    if (delay < -100) return;
+    this.snippetTimer = window.setTimeout(
+      () => {
+        this.snippetTimer = null;
+        if (this.state.round === round) void this.playSnippet(snippet.durationMs);
+      },
+      Math.max(0, delay),
+    );
+  }
+
+  /** Enchères : seul celui qui a la main répond, une seule fois. */
+  private async submitAuctionAnswer(payload: AnswerPayload): Promise<void> {
+    const { auction, round, you } = this.state;
+    const holder = auction?.order[auction.turn];
+    if (!auction || holder?.playerId !== you || holder.status !== 'playing') return;
+    if (this.state.answer.status === 'pending') return;
+    const wrongCount = this.state.answer.wrongCount;
+    this.update({ answer: { status: 'pending', wrongCount } });
+    const result = await socket
+      .timeout(5000)
+      .emitWithAck('game:answer', payload)
+      .catch(() => null);
+    if (this.disposed || this.state.round !== round) return;
+    // Les effets sonores suivent l'état diffusé à tous (onAuctionState).
+    if (result?.accepted && result.correct) {
+      this.update({
+        answer: {
+          status: 'correct',
+          wrongCount,
+          points: result.points,
+          seasonExact: false,
+          sequenceExact: false,
+        },
+      });
+    } else {
+      this.update({
+        answer: { status: result?.accepted ? 'wrong' : 'idle', wrongCount: wrongCount + 1 },
+      });
     }
   }
 
@@ -464,6 +584,10 @@ export class GameSession {
     return this.state.settings.mode === 'progressive';
   }
 
+  private get isAuction(): boolean {
+    return this.state.settings.mode === 'auction';
+  }
+
   /** Le joueur peut encore répondre (pas trouvé, pas éliminé, pas abandonné, pas sa chanson). */
   private canAnswer(): boolean {
     const { status } = this.state.answer;
@@ -472,9 +596,13 @@ export class GameSession {
   }
 
   /** Joue l'extrait du palier en cours. */
-  private async playTier(): Promise<void> {
+  private playTier(): Promise<void> {
+    return this.playSnippet(PROGRESSIVE.tiersMs[this.state.progress.tier] ?? 0);
+  }
+
+  /** Joue `duration` ms depuis le point de départ de l'extrait (Progressif, Enchères). */
+  private async playSnippet(duration: number): Promise<void> {
     const round = this.state.round;
-    const duration = PROGRESSIVE.tiersMs[this.state.progress.tier] ?? 0;
     const snippet = ++this.snippetCount;
     this.update({ snippetPlaying: true });
     await this.audio.playSnippet(round, duration);
@@ -500,6 +628,11 @@ export class GameSession {
     for (const [event, handler] of Object.entries(this.handlers)) {
       socket.off(event as keyof ServerToClientEvents, handler as never);
     }
+  }
+
+  private clearSnippetTimer(): void {
+    if (this.snippetTimer !== null) window.clearTimeout(this.snippetTimer);
+    this.snippetTimer = null;
   }
 
   private clearTicks(): void {

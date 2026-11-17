@@ -58,6 +58,18 @@ describe('RoomManager', () => {
     expect(t.rooms.join(code, 'p9', 'Joueur 9')).toEqual({ ok: false, error: 'full' });
   });
 
+  it('Enchères : 2 joueurs connectés minimum pour lancer', () => {
+    const t = setup();
+    const code = t.create();
+    const auction = { mode: 'auction', rounds: 5, filters: { popularity: 'all', types: ['OP'] } };
+    t.rooms.updateSettings('alice', auction);
+    expect(t.rooms.start('alice')).toEqual({ ok: false, error: 'not_enough_players' });
+    t.rooms.join(code, 'bob', 'Bob');
+    t.rooms.setReady('bob', true);
+    expect(t.rooms.start('alice')).toEqual({ ok: true });
+    t.rooms.closeAll();
+  });
+
   it("seul l'hôte change les réglages et lance la partie", () => {
     const t = setup();
     const code = t.create();

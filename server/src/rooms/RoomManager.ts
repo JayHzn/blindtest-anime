@@ -7,6 +7,7 @@ import {
   ROOM_INTRO_MS,
   ROOM_MAX_PLAYERS,
   drawPlaylist,
+  minPlayers,
   normalizeRoomCode,
   sanitizePseudo,
   sanitizeSettings,
@@ -203,6 +204,10 @@ export class RoomManager {
     if (players.some((member) => !member.ready)) {
       this.broadcast(room);
       return { ok: false, error: 'players_not_ready' };
+    }
+    // Enchères (2) et Playlist (3) : nombre minimal de joueurs connectés.
+    if (players.length < minPlayers(room.settings.mode)) {
+      return { ok: false, error: 'not_enough_players' };
     }
     if (room.settings.mode === 'playlist') return this.startPicking(room, players.length);
     return this.launch(room, players, {});

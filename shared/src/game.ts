@@ -1,3 +1,4 @@
+import { AUCTION, type AuctionResult, type AuctionTurn, type AuctionView } from './auction';
 import { THEME_TYPES, type PopularityTier, type ThemeFilters, type ThemeType } from './catalogue';
 import { PLAYLIST, type PlaylistReveal } from './playlist';
 
@@ -5,12 +6,19 @@ import { PLAYLIST, type PlaylistReveal } from './playlist';
  * Modes de jeu :
  * - `classic` : 15 s d'écoute continue, points selon la rapidité ;
  * - `progressive` : extraits de plus en plus longs (façon Songspot), points selon le palier ;
- * - `playlist` : (multi) les joueurs choisissent les chansons, jouées avec les règles du Classique.
+ * - `playlist` : (multi) les joueurs choisissent les chansons, jouées avec les règles du Classique ;
+ * - `auction` : (multi) chacun annonce la durée d'extrait qu'il lui faut, le plus audacieux répond.
  */
-export type GameModeId = 'classic' | 'progressive' | 'playlist';
-export const GAME_MODES: readonly GameModeId[] = ['classic', 'progressive', 'playlist'];
+export type GameModeId = 'classic' | 'progressive' | 'playlist' | 'auction';
+export const GAME_MODES: readonly GameModeId[] = ['classic', 'progressive', 'playlist', 'auction'];
 export const SOLO_MODES: readonly GameModeId[] = ['classic', 'progressive'];
 export const ROOM_MODES: readonly GameModeId[] = GAME_MODES;
+
+/** Joueurs connectés nécessaires pour lancer une partie dans ce mode. */
+export function minPlayers(mode: GameModeId): number {
+  if (mode === 'playlist') return PLAYLIST.minPlayers;
+  return mode === 'auction' ? AUCTION.minPlayers : 1;
+}
 
 export interface ModeTiming {
   /** Compte à rebours avant l'écoute (son de cloche). */
@@ -25,6 +33,8 @@ export const MODE_TIMINGS: Record<GameModeId, ModeTiming> = {
   classic: { countdownMs: 3000, listenMs: 15_000, revealMs: 10_000 },
   progressive: { countdownMs: 3000, listenMs: 60_000, revealMs: 10_000 },
   playlist: { countdownMs: 3000, listenMs: 15_000, revealMs: 10_000 },
+  // Enchères : `listenMs` = temps de réponse de celui qui a la main (voir AUCTION).
+  auction: { countdownMs: 3000, listenMs: AUCTION.answerMs, revealMs: 10_000 },
 };
 
 /** Mode Progressif : durée des extraits, points et essais par palier. */
@@ -150,7 +160,8 @@ export function sanitizePseudo(input: unknown): string {
   return text.slice(0, PSEUDO_MAX_LENGTH) || 'Joueur';
 }
 
-export type GamePhase = 'countdown' | 'listening' | 'reveal' | 'finished';
+/** `bidding` et `answering` : mode Enchères (annonce secrète, réponse de celui qui a la main). */
+export type GamePhase = 'countdown' | 'bidding' | 'listening' | 'answering' | 'reveal' | 'finished';
 
 export interface PlayerScore {
   id: string;
@@ -190,6 +201,8 @@ export interface GameSnapshot {
   progress: TierProgress | null;
   /** Mode Playlist : ce que le joueur voit de la manche en cours. */
   playlist: PlaylistRoundView | null;
+  /** Mode Enchères : manche en cours vue par le joueur. */
+  auction: AuctionView | null;
 }
 
 /** Manche en cours du mode Playlist, vue par un joueur (rien sur les choix des autres). */
@@ -228,6 +241,8 @@ export interface PlayerRoundResult {
   tier: number | null;
   /** Mode Playlist : détail des points. */
   playlist?: PlaylistPoints;
+  /** Mode Enchères : annonce et issue (`points` est alors négatif en cas d'erreur). */
+  auction?: AuctionResult;
 }
 
 export interface LocalizedTitle {
@@ -259,12 +274,20 @@ export interface RoundReveal {
   players: PlayerScore[];
   /** Mode Playlist : qui a choisi la chanson, paris, points. */
   playlist?: PlaylistReveal;
+  /** Mode Enchères : ordre de passage final, avec les propositions fausses. */
+  auction?: AuctionTurn[];
 }
 
 export type AnswerResult =
   | {
       accepted: false;
-      reason: 'not_listening' | 'already_found' | 'not_in_game' | 'eliminated' | 'own_song';
+      reason:
+        | 'not_listening'
+        | 'already_found'
+        | 'not_in_game'
+        | 'eliminated'
+        | 'own_song'
+        | 'not_your_turn';
     }
   | {
       accepted: true;
