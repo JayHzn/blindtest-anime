@@ -10,9 +10,10 @@ services:
     runtime: node
     plan: free
     region: frankfurt
+    # --include=dev : NODE_ENV=production ferait sauter tsx/tsup/TypeScript, nécessaires au build.
     # Le catalogue (AnimeThemes + AniList + Wikidata) est généré à chaque build (~5 min).
     # Si la synchro échoue, le build échoue et Render garde la version en ligne.
-    buildCommand: npm ci && npm run catalogue:sync -w server && npm run build -w server
+    buildCommand: npm ci --include=dev && npm run catalogue:sync -w server && npm run build -w server
     startCommand: npm run start -w server
     healthCheckPath: /api/health
     autoDeploy: true
@@ -27,7 +28,7 @@ services:
   - type: web
     name: anilind
     runtime: static
-    buildCommand: npm ci && npm run build -w client
+    buildCommand: npm ci --include=dev && npm run build -w client
     staticPublishPath: client/dist
     autoDeploy: true
     envVars:
