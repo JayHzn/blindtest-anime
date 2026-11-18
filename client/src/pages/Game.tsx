@@ -79,7 +79,7 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
       </AppHeader>
 
       <div className={styles.layout}>
-        <main className={styles.stage}>
+        <main className={[styles.stage, higherLowerMode ? styles.stageBare : ''].join(' ')}>
           {state.soundBlocked ? (
             <button
               type="button"

@@ -10,92 +10,84 @@ import {
   type RoundReveal,
 } from '@blindtest/shared';
 import type { GameSession, SessionState } from '../../game/GameSession';
-import { secondsLeft } from '../../hooks/useServerNow';
 import {
   cardMeta,
   formatMembers,
   formatRatio,
-  pickLabel,
+  pickLower,
   pickShort,
   windowLabel,
 } from '../../game/higherLowerFormat';
+import { secondsLeft } from '../../hooks/useServerNow';
 import { useI18n } from '../../i18n/context';
 import { avatarColor } from '../../lib/avatar';
-import { Vinyl } from '../Vinyl';
 import { TimerBar } from './TimerBar';
 import sidebar from './GameSidebar.module.css';
 import styles from './HigherLower.module.css';
 
+/*
+ * Mode Plus ou moins, d'après la maquette validée :
+ * écoute et choix, révélation, série dans l'en-tête, joueurs encore en jeu.
+ */
+
+// ─── Éléments communs ─────────────────────────────────────────────────────────
+
+/** Disque de la maquette : tourne (étiquette rose) pendant l'extrait, estompé sinon. */
+function Disc({ playing }: { playing: boolean }) {
+  return (
+    <svg
+      className={[styles.disc, playing ? styles.discPlaying : ''].join(' ')}
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+    >
+      <circle cx="50" cy="50" r="48" fill="#120D19" />
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#2A2035" strokeWidth="1.5" />
+      <circle cx="50" cy="50" r="30" fill="none" stroke="#2A2035" strokeWidth="1.5" />
+      <circle cx="50" cy="50" r="16" fill={playing ? '#FF9EC7' : '#B9A6FF'} />
+      <circle cx="50" cy="50" r="3" fill="#120D19" />
+      {playing ? (
+        <path
+          d="M50 6 A44 44 0 0 1 94 50"
+          fill="none"
+          stroke="#B9A6FF"
+          strokeWidth="2"
+          strokeLinecap="round"
+          opacity=".7"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
+function Chevron({ up = false, size = 22 }: { up?: boolean; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={up ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
+    </svg>
+  );
+}
+
+/** Jaquette AniList (sur sa couleur dominante, le temps qu'elle charge). */
+function Jacket({ card }: { card: HigherLowerCard }) {
+  return card.coverUrl ? (
+    <img className={styles.jacket} src={card.coverUrl} alt="" />
+  ) : (
+    <span className={styles.jacket} />
+  );
+}
+
 const pseudoOf = (players: PlayerScore[], id: string) =>
   players.find((player) => player.id === id)?.pseudo ?? '?';
-
-// ─── Carte d'une chanson ─────────────────────────────────────────────────────
-
-interface SongCardProps {
-  letter: string;
-  /** Chanson révélée (référence, ou révélation) ; absente : titre caché, vinyle. */
-  card?: HigherLowerCard | null;
-  playing?: boolean;
-  winner?: boolean;
-  /** Badge « Plus populaire » sur la jaquette. */
-  more?: boolean;
-  label: string;
-  children?: ReactNode;
-}
-
-function SongCard({
-  letter,
-  card,
-  playing = false,
-  winner = false,
-  more,
-  label,
-  children,
-}: SongCardProps) {
-  const { t, lang } = useI18n();
-  return (
-    <section
-      className={[styles.card, playing ? styles.playing : '', winner ? styles.winner : ''].join(
-        ' ',
-      )}
-      aria-label={label}
-    >
-      <div
-        className={styles.cover}
-        style={card?.coverColor ? { background: card.coverColor } : undefined}
-      >
-        <span className={styles.letter}>{letter}</span>
-        {card?.coverUrl ? (
-          <img className={styles.coverImage} src={card.coverUrl} alt="" loading="lazy" />
-        ) : card ? null : (
-          <Vinyl size={140} spinning={playing} />
-        )}
-        {more ? <span className={styles.more}>{t('hl.reveal.more')}</span> : null}
-      </div>
-      {card ? (
-        <>
-          <p className={styles.title}>{card.title[lang]}</p>
-          <p className={styles.meta}>{cardMeta(card)}</p>
-        </>
-      ) : (
-        <>
-          <p className={styles.title}>???</p>
-          <p className={styles.meta}>{t('hl.card.hidden')}</p>
-        </>
-      )}
-      {children}
-    </section>
-  );
-}
-
-function Members({ card, animate = false }: { card: HigherLowerCard; animate?: boolean }) {
-  const { t, lang } = useI18n();
-  return (
-    <span className={[styles.members, animate ? styles.counted : ''].join(' ')}>
-      {formatMembers(card.popularity, lang)} <small>{t('hl.members')}</small>
-    </span>
-  );
-}
 
 // ─── Écoute et choix ──────────────────────────────────────────────────────────
 
@@ -105,7 +97,6 @@ interface StageProps {
   now: number;
 }
 
-/** Tour en cours : les deux chansons, le chrono, et les deux choix. */
 export function HigherLowerStage({ session, state, now }: StageProps) {
   const { t, lang } = useI18n();
   const view = state.higherLower;
@@ -122,40 +113,32 @@ export function HigherLowerStage({ session, state, now }: StageProps) {
   const canPick = !spectator && picked === null && !timeUp && now >= opensAt;
   const { clip } = state;
 
-  /** État d'une chanson du tour (index dans la chaîne, et début prévu de son extrait). */
-  const songStatus = (index: number, startsAt: number): ReactNode => {
-    if (clip?.index === index) {
-      return (
-        <>
-          <span className={styles.status}>
-            {t('hl.card.listening', { s: secondsLeft(clip.endsAt, now) })}
-          </span>
-          <div className={styles.miniTimer}>
-            <TimerBar endsAt={clip.endsAt} durationMs={snippetMs} />
-          </div>
-        </>
-      );
-    }
-    if (now < startsAt) {
-      return (
-        <span className={styles.statusMuted}>
-          {index === 1 && tour === 1 ? t('hl.card.afterA') : t('hl.card.waiting')}
-        </span>
-      );
-    }
-    return <span className={styles.statusMuted}>{t('hl.card.listened')}</span>;
+  /** Statut, jauge et réécoute d'une chanson jouée pendant le tour. */
+  const listenBlock = (index: number, startsAt: number, replayLabel: string) => {
+    const playing = clip?.index === index;
+    const heard = now >= startsAt;
+    const elapsed = playing ? 1 - Math.max(0, clip.endsAt - now) / snippetMs : heard ? 1 : 0;
+    let status: string;
+    if (playing) status = t('hl.card.listening', { s: secondsLeft(clip.endsAt, now) });
+    else if (!heard) status = tour === 1 && index === 1 ? t('hl.card.afterA') : t('hl.card.soon');
+    else status = t('hl.card.listened');
+    return (
+      <>
+        <span className={[styles.status, playing ? styles.statusOn : ''].join(' ')}>{status}</span>
+        <div className={styles.mini} aria-hidden="true">
+          <span style={{ width: `${Math.round(Math.min(1, elapsed) * 100)}%` }} />
+        </div>
+        <button
+          type="button"
+          className={styles.replay}
+          disabled={!heard || playing || timeUp}
+          onClick={() => session.replayClip(index)}
+        >
+          {replayLabel}
+        </button>
+      </>
+    );
   };
-
-  const replayButton = (index: number, startsAt: number, label: string) => (
-    <button
-      type="button"
-      className={styles.replay}
-      disabled={now < startsAt || timeUp}
-      onClick={() => session.replayClip(index)}
-    >
-      {label}
-    </button>
-  );
 
   const choices: { pick: HigherLowerPick; label: string; icon?: ReactNode }[] =
     tour === 1
@@ -171,56 +154,117 @@ export function HigherLowerStage({ session, state, now }: StageProps) {
   const waitingFor = state.players.filter(
     (player) => isAlive(player) && player.connected && !player.found && player.id !== state.you,
   );
+  const multi = state.players.length > 1;
+
+  let line: ReactNode = null;
+  if (spectator) {
+    line = (
+      <p className={styles.hint}>
+        {me?.eliminatedAt === 0 ? t('hl.spectator.late') : t('hl.spectator.out')}
+      </p>
+    );
+  } else if (picked) {
+    const pick = tour === 1 ? pickShort(1, picked, t) : pickLower(picked, t);
+    const after =
+      waitingFor.length > 0
+        ? t('hl.pick.waiting', { names: waitingFor.map((player) => player.pseudo).join(', ') })
+        : multi
+          ? t('hl.pick.finalReveal')
+          : t('hl.pick.final');
+    line = (
+      <p className={styles.sent} role="status">
+        {t('hl.pick.sent', { pick })} {after}
+      </p>
+    );
+  } else if (timeUp) {
+    line = <p className={styles.hint}>{t('game.timeUp')}</p>;
+  } else if (now < opensAt) {
+    line = <p className={styles.hint}>{t('hl.pick.opensWithB')}</p>;
+  }
+
+  const reference = view?.reference ?? null;
 
   return (
     <div className={styles.stage}>
       {view ? <span className={styles.window}>{windowLabel(view.window, t, lang)}</span> : null}
-      {tour === 1 || !view?.reference ? (
+      {tour === 1 || !reference ? (
         <>
           <h1 className={styles.question}>{t('hl.question.first')}</h1>
-          <p className={styles.note}>{t('hl.popularityNote')}</p>
+          <p className={styles.sub}>{t('hl.popularityNote')}</p>
         </>
       ) : (
         <h1 className={styles.question}>
           {t('hl.question.before')}
-          <em>{view.reference.title[lang]}</em>
+          <em>{reference.title[lang]}</em>
           {t('hl.question.after')}
         </h1>
       )}
 
       <div className={styles.duel}>
-        {tour === 1 ? (
+        {tour === 1 || !reference ? (
           <>
-            <SongCard letter="A" label="A" playing={clip?.index === 0}>
-              {songStatus(0, startedAt)}
-              {replayButton(0, startedAt, t('hl.replay.letter', { x: 'A' }))}
-            </SongCard>
+            <section
+              className={[styles.card, clip?.index === 0 ? styles.playing : ''].join(' ')}
+              aria-label={t('hl.card.song', { x: 'A' })}
+            >
+              <div className={[styles.cover, styles.coverLarge].join(' ')}>
+                <span className={styles.letterRound}>A</span>
+                <Disc playing={clip?.index === 0} />
+              </div>
+              {listenBlock(0, startedAt, t('hl.replay.letter', { x: 'A' }))}
+            </section>
             <span className={styles.vs}>VS</span>
-            <SongCard letter="B" label="B" playing={clip?.index === 1}>
-              {songStatus(1, startedAt + snippetMs)}
-              {replayButton(1, startedAt + snippetMs, t('hl.replay.letter', { x: 'B' }))}
-            </SongCard>
+            <section
+              className={[styles.card, clip?.index === 1 ? styles.playing : ''].join(' ')}
+              aria-label={t('hl.card.song', { x: 'B' })}
+            >
+              <div className={[styles.cover, styles.coverLarge].join(' ')}>
+                <span className={styles.letterRound}>B</span>
+                <Disc playing={clip?.index === 1} />
+              </div>
+              {listenBlock(1, startedAt + snippetMs, t('hl.replay.letter', { x: 'B' }))}
+            </section>
           </>
         ) : (
           <>
-            <SongCard
-              letter={t('hl.card.reference')}
-              label={t('hl.card.reference')}
-              card={view?.reference}
-              playing={clip?.index === tour - 1}
+            <section
+              className={[styles.card, clip?.index === tour - 1 ? styles.playing : ''].join(' ')}
+              aria-label={t('hl.card.reference')}
             >
-              {view?.reference ? <Members card={view.reference} /> : null}
-              {replayButton(tour - 1, startedAt, t('hl.replay'))}
-            </SongCard>
+              <div
+                className={styles.cover}
+                style={reference.coverColor ? { background: reference.coverColor } : undefined}
+              >
+                <span className={styles.letter}>{t('hl.card.reference')}</span>
+                <Jacket card={reference} />
+              </div>
+              <p className={styles.title}>{reference.title[lang]}</p>
+              <p className={styles.meta}>{cardMeta(reference)}</p>
+              <span className={styles.members}>
+                {formatMembers(reference.popularity, lang)} <small>{t('hl.members')}</small>
+              </span>
+              <button
+                type="button"
+                className={styles.replay}
+                disabled={clip?.index === tour - 1 || timeUp}
+                onClick={() => session.replayClip(tour - 1)}
+              >
+                {t('hl.replay')}
+              </button>
+            </section>
             <span className={styles.vs}>VS</span>
-            <SongCard
-              letter={t('hl.card.new')}
-              label={t('hl.card.new')}
-              playing={clip?.index === tour}
+            <section
+              className={[styles.card, clip?.index === tour ? styles.playing : ''].join(' ')}
+              aria-label={t('hl.card.new')}
             >
-              {songStatus(tour, startedAt)}
-              {replayButton(tour, startedAt, t('hl.replay'))}
-            </SongCard>
+              <div className={styles.cover}>
+                <span className={styles.letter}>{t('hl.card.new')}</span>
+                <Disc playing={clip?.index === tour} />
+              </div>
+              <p className={styles.title}>???</p>
+              <p className={styles.meta}>{t('hl.card.hidden')}</p>
+              {listenBlock(tour, startedAt, t('hl.replay'))}
+            </section>
           </>
         )}
       </div>
@@ -241,70 +285,29 @@ export function HigherLowerStage({ session, state, now }: StageProps) {
         <TimerBar endsAt={state.phaseEndsAt} durationMs={listenMs} />
       </div>
 
-      {spectator ? (
-        <p className={styles.hint}>
-          {me?.eliminatedAt === 0 ? t('hl.spectator.late') : t('hl.spectator.out')}
-        </p>
-      ) : (
-        <>
-          <div className={styles.choices}>
-            {choices.map((choice) => (
-              <button
-                key={choice.pick}
-                type="button"
-                aria-pressed={picked === choice.pick}
-                disabled={!canPick}
-                className={[
-                  styles.choice,
-                  picked === choice.pick ? styles.choiceOn : '',
-                  picked !== null && picked !== choice.pick ? styles.choiceOff : '',
-                  picked === null && !canPick ? styles.choiceLocked : '',
-                ].join(' ')}
-                onClick={() => void session.pickHigherLower(choice.pick)}
-              >
-                {choice.icon}
-                {choice.label}
-              </button>
-            ))}
-          </div>
-          <p className={picked ? styles.sent : styles.hint} role="status" aria-live="polite">
-            {picked
-              ? `${t('hl.pick.sent', { pick: pickLabel(tour, picked, t) })} ${
-                  waitingFor.length > 0
-                    ? t('hl.pick.waiting', {
-                        names: waitingFor.map((player) => player.pseudo).join(', '),
-                      })
-                    : state.players.length > 1
-                      ? t('hl.pick.reveal')
-                      : ''
-                }`
-              : timeUp
-                ? t('game.timeUp')
-                : now < opensAt
-                  ? t('hl.pick.opensWithB')
-                  : ' '}
-          </p>
-        </>
+      {spectator ? null : (
+        <div className={styles.choices}>
+          {choices.map((choice) => (
+            <button
+              key={choice.pick}
+              type="button"
+              aria-pressed={picked === choice.pick}
+              disabled={!canPick}
+              className={[
+                styles.choice,
+                picked === choice.pick ? styles.choiceOn : '',
+                picked !== null && picked !== choice.pick ? styles.choiceOff : '',
+              ].join(' ')}
+              onClick={() => void session.pickHigherLower(choice.pick)}
+            >
+              {choice.icon}
+              {choice.label}
+            </button>
+          ))}
+        </div>
       )}
+      {line}
     </div>
-  );
-}
-
-function Chevron({ up = false }: { up?: boolean }) {
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={up ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
-    </svg>
   );
 }
 
@@ -316,60 +319,84 @@ interface RevealProps {
   now: number;
 }
 
-/** Révélation (6 s) : jaquettes, membres, écart, choix de chacun, référence suivante. */
 export function HigherLowerReveal({ reveal, you, now }: RevealProps) {
   const { t, lang } = useI18n();
   const hl = reveal.higherLower;
   if (!hl) return null;
   const { tour, reference, challenger } = hl;
   const mine = hl.picks.find((entry) => entry.playerId === you);
-  const answer = pickLabel(tour, hl.answer, t);
   const challengerMore = hl.answer === 'higher';
+  const answer =
+    tour === 1
+      ? t(challengerMore ? 'hl.pick.bHigher' : 'hl.pick.aHigher')
+      : t(challengerMore ? 'hl.pick.higher' : 'hl.pick.lower');
   const score = reveal.players.find((player) => player.id === you)?.score ?? 0;
-  const multi = reveal.players.length > 1;
+  const max = Math.max(reference.popularity, challenger.popularity);
+
+  let title: string;
+  let sub: string | null = null;
+  let tone = '';
+  if (!mine) {
+    title = t('hl.reveal.answer', { answer });
+  } else if (mine.correct) {
+    title = t('hl.reveal.right', { answer });
+    sub = t('hl.reveal.streak', { n: score });
+    tone = styles.verdictRight ?? '';
+  } else {
+    title = t('hl.reveal.wrong', { answer });
+    tone = styles.verdictWrong ?? '';
+    sub = hl.allWrong
+      ? t('hl.reveal.allWrong')
+      : reveal.players.length > 1
+        ? t('hl.reveal.youOut')
+        : t('hl.reveal.streakOver', { n: score });
+  }
+
+  const side = (card: HigherLowerCard, tag: string, more: boolean) => (
+    <section className={[styles.card, more ? styles.win : ''].join(' ')} aria-label={tag}>
+      <div
+        className={[styles.cover, styles.coverReveal].join(' ')}
+        style={card.coverColor ? { background: card.coverColor } : undefined}
+      >
+        <span className={styles.tag}>{tag}</span>
+        {more ? (
+          <span className={styles.crown}>
+            <Chevron up size={14} />
+            {t('hl.reveal.more')}
+          </span>
+        ) : null}
+        <Jacket card={card} />
+      </div>
+      <p className={styles.title}>{card.title[lang]}</p>
+      <p className={styles.meta}>{cardMeta(card)}</p>
+      <span className={styles.membersBig}>
+        {formatMembers(card.popularity, lang)}
+        <small>{t('hl.members')}</small>
+      </span>
+      <div className={styles.gauge} aria-hidden="true">
+        <span
+          className={more ? styles.gaugeWin : styles.gaugeLose}
+          style={{ width: `${Math.round((card.popularity / max) * 100)}%` }}
+        />
+      </div>
+    </section>
+  );
 
   return (
     <div className={styles.stage}>
-      <h1
-        className={[
-          styles.verdict,
-          mine ? (mine.correct ? styles.verdictRight : styles.verdictWrong) : '',
-        ].join(' ')}
-        role="status"
-      >
-        {mine
-          ? t(mine.correct ? 'hl.reveal.right' : 'hl.reveal.wrong', { answer })
-          : t('hl.reveal.answer', { answer })}
-      </h1>
-      {mine?.correct ? (
-        <p className={styles.streakLine}>{t('hl.reveal.streak', { n: score })}</p>
-      ) : null}
-      {hl.allWrong ? <p className={styles.allWrong}>{t('hl.reveal.allWrong')}</p> : null}
-
-      <div className={styles.duel}>
-        <SongCard
-          letter={tour === 1 ? 'A' : t('hl.card.reference')}
-          label={tour === 1 ? 'A' : t('hl.card.reference')}
-          card={reference}
-          more={!challengerMore}
-          winner={!challengerMore}
-        >
-          <Members card={reference} />
-        </SongCard>
-        <span className={styles.ratio}>×{formatRatio(hl.ratio, lang)}</span>
-        <SongCard
-          letter={tour === 1 ? 'B' : t('hl.card.new')}
-          label={tour === 1 ? 'B' : t('hl.card.new')}
-          card={challenger}
-          more={challengerMore}
-          winner={challengerMore}
-        >
-          <Members card={challenger} animate />
-        </SongCard>
+      <div className={styles.verdict} role="status">
+        <p className={[styles.verdictTitle, tone].join(' ')}>{title}</p>
+        {sub ? <p className={styles.verdictSub}>{sub}</p> : null}
       </div>
 
-      {multi && hl.picks.length > 0 ? (
-        <ul className={styles.picks}>
+      <div className={styles.duel}>
+        {side(reference, tour === 1 ? 'A' : t('hl.card.reference'), !challengerMore)}
+        <span className={styles.ratio}>×{formatRatio(hl.ratio, lang)}</span>
+        {side(challenger, tour === 1 ? 'B' : t('hl.card.new'), challengerMore)}
+      </div>
+
+      {reveal.players.length > 1 && hl.picks.length > 0 ? (
+        <div className={styles.results} aria-label={t('hl.reveal.answers')}>
           {hl.picks.map((entry) => {
             const out = hl.eliminated.includes(entry.playerId);
             const name =
@@ -377,65 +404,70 @@ export function HigherLowerReveal({ reveal, you, now }: RevealProps) {
                 ? t('hl.reveal.you')
                 : pseudoOf(reveal.players, entry.playerId);
             const choice = entry.pick ? pickShort(tour, entry.pick, t) : t('hl.reveal.noPick');
+            const text = entry.correct
+              ? t('hl.reveal.pickRight', { pick: choice })
+              : out
+                ? t('hl.reveal.pickOut', { pick: choice })
+                : t('hl.reveal.pickWrong', { pick: choice });
             return (
-              <li
+              <div
                 key={entry.playerId}
-                className={[
-                  styles.pickItem,
-                  entry.correct ? styles.pickRight : styles.pickWrong,
-                  out ? styles.pickOut : '',
-                ].join(' ')}
+                className={[styles.res, out ? styles.resBad : ''].join(' ')}
               >
                 <span
                   className={styles.avatar}
                   style={{ background: avatarColor(entry.playerId) }}
                   aria-hidden="true"
                 >
-                  {name.charAt(0).toUpperCase()}
+                  {pseudoOf(reveal.players, entry.playerId).charAt(0).toUpperCase()}
                 </span>
-                {name} ·{' '}
-                {entry.correct
-                  ? t('hl.reveal.pickRight', { pick: choice })
-                  : t('hl.reveal.pickWrong', { pick: choice })}
-                {out ? ` · ${t('hl.reveal.out')}` : ''}
-              </li>
+                <div>
+                  <div
+                    className={[styles.rname, entry.playerId === you ? styles.you : ''].join(' ')}
+                  >
+                    {name}
+                  </div>
+                  <div className={[styles.rpick, entry.correct ? styles.ok : styles.ko].join(' ')}>
+                    {text}
+                  </div>
+                </div>
+              </div>
             );
           })}
-        </ul>
+        </div>
       ) : null}
 
-      {hl.gameOver ? (
-        <p className={styles.countdown}>
-          {t('game.reveal.last', { s: secondsLeft(reveal.phaseEndsAt, now) })}
-        </p>
-      ) : (
-        <>
-          <p className={styles.next}>
-            {t('hl.reveal.nextRef', { n: tour + 1 })} <strong>{challenger.title[lang]}</strong>{' '}
+      <p className={styles.next}>
+        <span className={styles.count}>{secondsLeft(reveal.phaseEndsAt, now)}</span>
+        {hl.gameOver ? (
+          t('hl.reveal.results')
+        ) : (
+          <span>
+            {t('hl.reveal.nextRef', { n: tour + 1 })} <b>{challenger.title[lang]}</b>{' '}
             {t('hl.reveal.nextRefEnd')}
-          </p>
-          <p className={styles.countdown}>
-            {t('hl.reveal.next', { s: secondsLeft(reveal.phaseEndsAt, now) })}
-          </p>
-        </>
-      )}
+          </span>
+        )}
+      </p>
     </div>
   );
 }
 
 // ─── En-tête : série ──────────────────────────────────────────────────────────
 
-/** « Série 3 » et les couleurs des jaquettes de la série. */
+/** « Série 3 » et la couleur des jaquettes de la série (verte juste après une bonne réponse). */
 export function StreakPill({ state }: { state: SessionState }) {
   const { t } = useI18n();
   const score = state.players.find((player) => player.id === state.you)?.score ?? 0;
   const colors = state.history
     .filter((reveal) => reveal.results.find((r) => r.playerId === state.you)?.correct)
-    .map((reveal) => reveal.higherLower?.challenger.coverColor ?? 'var(--color-lavender)')
-    .slice(-5);
+    .map((reveal) => reveal.higherLower?.challenger.coverColor ?? '#B9A6FF')
+    .slice(-6);
+  const justScored =
+    state.phase === 'reveal' &&
+    state.reveal?.results.find((r) => r.playerId === state.you)?.correct === true;
   return (
-    <span className={styles.streak}>
-      {t('hl.streak')} <b>{score}</b>
+    <span className={[styles.streak, colors.length > 0 ? styles.streakChain : ''].join(' ')}>
+      {t('hl.streak')} <b className={justScored ? styles.streakUp : ''}>{score}</b>
       {colors.length > 0 ? (
         <span className={styles.chain} aria-hidden="true">
           {colors.map((color, i) => (
@@ -447,15 +479,14 @@ export function StreakPill({ state }: { state: SessionState }) {
   );
 }
 
-// ─── Barre latérale ───────────────────────────────────────────────────────────
+// ─── Joueurs ──────────────────────────────────────────────────────────────────
 
-/** Joueurs encore en jeu (et ce qu'ils font), éliminés, et la série du joueur. */
+/** « Encore en jeu » (écoute, réfléchit…, a répondu, série N), puis les éliminés. */
 export function HigherLowerSidebar({ state, now }: { state: SessionState; now: number }) {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const { players, you, phase } = state;
   const alive = players.filter(isAlive);
   const out = players.filter((player) => !isAlive(player));
-  const me = players.find((player) => player.id === you);
   const tour = state.round;
   const opensAt = state.phaseEndsAt - higherLowerListenMs(tour) + pickOpensAfterMs(tour);
 
@@ -467,88 +498,45 @@ export function HigherLowerSidebar({ state, now }: { state: SessionState; now: n
   };
 
   const row = (player: PlayerScore, right: { text: string; done?: boolean }, dim = false) => (
-    <li
+    <div
       key={player.id}
-      className={[
-        sidebar.player,
-        player.id === you ? sidebar.me : '',
-        player.connected ? '' : sidebar.offline,
-        dim ? styles.out : '',
-      ].join(' ')}
+      className={[styles.player, dim || !player.connected ? styles.out : ''].join(' ')}
     >
       <span
-        className={sidebar.avatar}
+        className={styles.pavatar}
         style={{ background: avatarColor(player.id) }}
         aria-hidden="true"
       >
         {player.pseudo.charAt(0).toUpperCase()}
       </span>
-      <span className={sidebar.name}>
+      <span className={[styles.pname, player.id === you ? styles.you : ''].join(' ')}>
         {player.pseudo}
         {player.id === you ? ` ${t('hl.you')}` : ''}
       </span>
-      <span className={[styles.state, right.done ? styles.stateDone : ''].join(' ')}>
-        {right.text}
-      </span>
-    </li>
+      <span className={[styles.pstate, right.done ? styles.done : ''].join(' ')}>{right.text}</span>
+    </div>
   );
 
   return (
-    <aside className={sidebar.sidebar}>
-      {players.length > 1 ? (
-        <section className={sidebar.ranking}>
-          <h2 className={styles.sideTitle}>{t('hl.side.alive', { n: alive.length })}</h2>
-          <ol className={sidebar.players}>{alive.map((player) => row(player, stateOf(player)))}</ol>
-          {out.length > 0 ? (
-            <>
-              <p className={styles.sep}>{t('hl.side.out')}</p>
-              <ol className={sidebar.players}>
-                {out.map((player) =>
-                  row(
-                    player,
-                    {
-                      text: player.eliminatedAt
-                        ? t('hl.side.tour', { n: player.eliminatedAt })
-                        : t('hl.side.watching'),
-                    },
-                    true,
-                  ),
-                )}
-              </ol>
-              <p className={styles.sideHint}>{t('hl.side.hint')}</p>
-            </>
-          ) : null}
-        </section>
-      ) : (
-        <div className={sidebar.scoreCard}>
-          <span className={sidebar.scoreLabel}>{t('hl.streak')}</span>
-          <span className={sidebar.score}>{me?.score ?? 0}</span>
-        </div>
-      )}
-
-      {state.history.length > 0 ? (
-        <section className={sidebar.history}>
-          <h2 className={sidebar.historyTitle}>{t('hl.side.series')}</h2>
-          <ol className={sidebar.rounds}>
-            {[...state.history].reverse().map((reveal) => {
-              const mine = reveal.results.find((result) => result.playerId === you);
-              const hl = reveal.higherLower;
-              if (!hl || !mine) return null;
-              return (
-                <li key={reveal.round} className={sidebar.round}>
-                  <span
-                    className={[sidebar.mark, mine.correct ? sidebar.markFound : ''].join(' ')}
-                    aria-hidden="true"
-                  >
-                    {mine.correct ? '✓' : '✗'}
-                  </span>
-                  <span className={sidebar.roundTitle}>{hl.challenger.title[lang]}</span>
-                  <span className={styles.ratioSmall}>×{formatRatio(hl.ratio, lang)}</span>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+    <aside className={[sidebar.sidebar, styles.side].join(' ')} aria-label={t('game.players')}>
+      <h2 className={styles.sideTitle}>{t('hl.side.alive', { n: alive.length })}</h2>
+      {alive.map((player) => row(player, stateOf(player)))}
+      {out.length > 0 ? (
+        <>
+          <p className={styles.sep}>{t('hl.side.out')}</p>
+          {out.map((player) =>
+            row(
+              player,
+              {
+                text: player.eliminatedAt
+                  ? t('hl.side.tour', { n: player.eliminatedAt })
+                  : t('hl.side.watching'),
+              },
+              true,
+            ),
+          )}
+          {players.length > 1 ? <p className={styles.sideHint}>{t('hl.side.hint')}</p> : null}
+        </>
       ) : null}
     </aside>
   );

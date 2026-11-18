@@ -26,6 +26,11 @@ export function pickShort(tour: number, pick: HigherLowerPick, t: T): string {
   return t(pick === 'higher' ? 'hl.pick.short.higher' : 'hl.pick.short.lower');
 }
 
+/** Choix en minuscules, dans une phrase : « plus populaire » / « moins populaire ». */
+export function pickLower(pick: HigherLowerPick, t: T): string {
+  return t(pick === 'higher' ? 'hl.pick.lc.higher' : 'hl.pick.lc.lower');
+}
+
 /** « OP1 · « 99 » · MOB CHOIR · 2016 » */
 export function cardMeta(card: HigherLowerCard): string {
   return [

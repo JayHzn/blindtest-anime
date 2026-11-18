@@ -35,6 +35,13 @@
   background: var(--color-surface);
 }
 
+/* Plus ou moins : les cartes du duel posées sur le fond, sans panneau (maquette). */
+.stageBare {
+  justify-content: flex-start;
+  padding: var(--space-2) 0;
+  background: transparent;
+}
+
 .countdown,
 .listening {
   width: 100%;
@@ -470,5 +477,11 @@
 
   .seconds {
     font-size: 17px;
+  }
+}
+
+@media (max-width: 560px) {
+  .stageBare {
+    padding: 0;
   }
 }

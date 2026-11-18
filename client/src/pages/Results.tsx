@@ -9,7 +9,13 @@ import styles from './Results.module.css';
 
 export type ResultsActions =
   | { kind: 'solo'; onReplay: () => void; onSettings: () => void; onHome: () => void }
-  | { kind: 'room'; onBackToLobby: () => void; onLeave: () => void };
+  | {
+      kind: 'room';
+      onBackToLobby: () => void;
+      onLeave: () => void;
+      /** Code de la room (affiché en Plus ou moins). */
+      code?: string;
+    };
 
 interface ResultsProps {
   state: SessionState;

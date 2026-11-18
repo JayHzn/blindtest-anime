@@ -234,6 +234,7 @@ function RoomFlow({ room, volume, onVolumeChange, onLeave, onClosed }: RoomFlowP
         volume={volume}
         onVolumeChange={onVolumeChange}
         onBackToLobby={() => room.backToLobby()}
+        code={roomState?.code}
         onLeave={onLeave}
       />
     );
@@ -248,12 +249,13 @@ interface RoomGameProps {
   onVolumeChange: (volume: number) => void;
   onBackToLobby: () => void;
   onLeave: () => void;
+  code?: string;
 }
 
-function RoomGame({ game, volume, onVolumeChange, onBackToLobby, onLeave }: RoomGameProps) {
+function RoomGame({ game, volume, onVolumeChange, onBackToLobby, onLeave, code }: RoomGameProps) {
   const state = useGameSession(game);
   if (state.status === 'ended') {
-    return <Results state={state} actions={{ kind: 'room', onBackToLobby, onLeave }} />;
+    return <Results state={state} actions={{ kind: 'room', onBackToLobby, onLeave, code }} />;
   }
   return <Game session={game} volume={volume} onVolumeChange={onVolumeChange} onQuit={onLeave} />;
 }
