@@ -15,6 +15,8 @@ import { Game, LISTEN_LEAD_MS, type GameEmitter } from './Game';
 
 /** Musiques de rechange tirées en plus, au cas où un audio ne charge pas. */
 const SPARE_THEMES = 5;
+/** Le bon OP : manches de rechange (chacune prend 4 séries au catalogue). */
+const RIGHT_OP_SPARE_ROUNDS = 3;
 
 export type CreateGameResult = { ok: true; game: Game } | { ok: false; error: StartGameError };
 
@@ -73,6 +75,7 @@ export class GameManager {
     let themes: ThemeRow[];
     let choosers: string[][] | undefined;
     let impostorThemes: ThemeRow[] | undefined;
+    let rightOpTraps: ThemeRow[][] | undefined;
     if (playlist) {
       const rounds = playlist.filter((round) => this.catalogue!.getTheme(round.themeId));
       themes = rounds.map((round) => this.catalogue!.getTheme(round.themeId)!);
@@ -89,6 +92,14 @@ export class GameManager {
       // Chaîne complète tirée d'avance (la chanson 0 est la première référence).
       themes = this.catalogue.higherLowerChain(settings.filters, HIGHER_LOWER.maxTours + 1);
       if (themes.length < 2) return { ok: false, error: 'not_enough_themes' };
+    } else if (settings.mode === 'rightOp') {
+      // Une chanson et 3 pièges proches par manche (4 séries chacune : peu de remplaçantes).
+      const rounds = this.catalogue.rightOpRounds(
+        settings.filters,
+        settings.rounds + RIGHT_OP_SPARE_ROUNDS,
+      );
+      themes = rounds.map((round) => round.target);
+      rightOpTraps = rounds.map((round) => round.traps);
     } else {
       themes = this.catalogue.pickThemes(settings.filters, settings.rounds + SPARE_THEMES);
     }
@@ -105,6 +116,7 @@ export class GameManager {
       themes,
       choosers,
       impostorThemes,
+      rightOpTraps,
       mirror: this.mirror,
       introMs,
       audioWaitMs,

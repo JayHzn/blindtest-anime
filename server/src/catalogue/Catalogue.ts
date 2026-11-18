@@ -306,6 +306,83 @@ export class Catalogue {
     return pairs;
   }
 
+  /**
+   * Le bon OP : `count` manches { chanson à trouver, 3 pièges }. Les pièges sont
+   * proches (mêmes règles que l'Imposteur : même type, années à 5 ans près,
+   * popularité à ×2,5 près, même genre si possible), chacun d'une autre série ;
+   * à défaut, les plus proches en popularité, du même type. Jamais deux fois la
+   * même franchise dans la partie.
+   */
+  rightOpRounds(
+    filters: ThemeFilters,
+    count: number,
+    random: () => number = Math.random,
+  ): { target: ThemeRow; traps: ThemeRow[] }[] {
+    const traps = 3;
+    const filter = this.themeFilter(filters);
+    const candidates = this.themeList.filter(
+      (theme) => filter(theme) && this.anime.get(theme.animeId)!.popularity > 0,
+    );
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
+    }
+    const franchiseOf = (theme: ThemeRow) => this.anime.get(theme.animeId)!.franchiseId;
+    const used = new Set<number>();
+    const rounds: { target: ThemeRow; traps: ThemeRow[] }[] = [];
+
+    for (const target of candidates) {
+      if (rounds.length >= count) break;
+      if (used.has(franchiseOf(target))) continue;
+      const a = this.anime.get(target.animeId)!;
+      const close: { theme: ThemeRow; score: number }[] = [];
+      const others: { theme: ThemeRow; ratio: number }[] = [];
+      for (const other of candidates) {
+        const franchise = franchiseOf(other);
+        if (
+          other.type !== target.type ||
+          franchise === franchiseOf(target) ||
+          used.has(franchise)
+        ) {
+          continue;
+        }
+        const b = this.anime.get(other.animeId)!;
+        const ratio = popularityRatio(a.popularity, b.popularity);
+        others.push({ theme: other, ratio });
+        const yearGap = a.year !== null && b.year !== null ? Math.abs(a.year - b.year) : 99;
+        if (yearGap > 5 || ratio > 2.5) continue;
+        const sameGenre = a.genre !== null && a.genre === b.genre;
+        close.push({ theme: other, score: (sameGenre ? 0 : 10) + yearGap + (ratio - 1) * 3 });
+      }
+      close.sort((x, y) => x.score - y.score);
+      others.sort((x, y) => x.ratio - y.ratio);
+
+      // Un peu de hasard parmi les plus proches, une seule chanson par série.
+      const picked: ThemeRow[] = [];
+      const pickedFranchises = new Set<number>();
+      const pool = close.slice(0, 8).map((c) => c.theme);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+      }
+      for (const theme of [
+        ...pool,
+        ...close.slice(8).map((c) => c.theme),
+        ...others.map((o) => o.theme),
+      ]) {
+        if (picked.length === traps) break;
+        if (pickedFranchises.has(franchiseOf(theme))) continue;
+        pickedFranchises.add(franchiseOf(theme));
+        picked.push(theme);
+      }
+      if (picked.length < traps) continue;
+      used.add(franchiseOf(target));
+      for (const franchise of pickedFranchises) used.add(franchise);
+      rounds.push({ target, traps: picked });
+    }
+    return rounds;
+  }
+
   /** Valide la réponse d'un joueur pour une musique donnée. */
   validate(themeId: number, answer: AnswerPayload): AnswerVerdict {
     const wrong: AnswerVerdict = { correct: false, seasonExact: false, sequenceExact: false };

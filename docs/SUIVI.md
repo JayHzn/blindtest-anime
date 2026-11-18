@@ -1,5 +1,21 @@
 # Suivi du projet
 
+## 2026-11-19
+
+### Ce qui a été fait
+
+- **Le bon OP (v2)** : solo et multi, « blindtest à l'envers » : un anime, 4 extraits de 4 s (la bonne chanson et 3 pièges proches), puis 15 s de décompte avec réécoute libre, un seul essai. Maquette : https://claude.ai/artifact/34ZnCjCJwuGLHDkHkoEJZr. Vérifié avec Playwright (solo, room à 2 avec un téléphone).
+- **Révélation détaillée** (Classique, Progressif, Playlist) — commit `13042b6` : ta réponse face à la bonne (série, saison, numéro), détail des points et bonus manqués avec la bonne valeur. Maquette : https://claude.ai/artifact/8SfK3SbnNKSUoGZeb63nUT.
+- **Nouvelle partie** — commit `1ebcd4d` : sur grand écran, les règles du mode passent dans la marge de droite, alignées sur les cartes de mode ; connexion au miroir ouverte dès l'arrivée sur le site (`VITE_MIRROR_URL`, à vérifier dans Render, service `anilind`).
+- **Idées** remises dans `docs/IDEES.md` (jamais commitées jusque-là) : Mode Puzzle (coop), Défi du jour, Stockage persistant, Tournoi en duels.
+- **Miroir audio** : le workflow du top 2000 s'est terminé sans erreur ; 6 151 chansons sur R2 (7,29 Go sur 10). Les 8 manquantes passent par le proxy de Render.
+
+### À faire
+
+- Les points 1 à 8 du 2026-11-18 restent valables (clés du miroir, iPhone, tests à plusieurs…).
+- **Nouveaux modes** : trancher les règles de « Chronologie » ; le Puzzle en version Survie est un bon candidat (pas besoin de base hébergée).
+- **Économie de données** (jaquette au lieu de la vidéo en 4G) : à réfléchir.
+
 ## 2026-11-18
 
 ### Ce qui a été fait

@@ -28,6 +28,11 @@
   width: min(100%, calc(40vh * 16 / 9));
 }
 
+/* Le bon OP : les 4 cartes retournées sont l'essentiel, la vidéo se fait plus petite. */
+.withRightOp .media {
+  width: min(100%, calc(28vh * 16 / 9));
+}
+
 .withPlaylist.withRecap .media {
   width: min(100%, calc(32vh * 16 / 9));
 }

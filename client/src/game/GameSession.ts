@@ -4,7 +4,10 @@ import {
   INITIAL_PROGRESS,
   MODE_TIMINGS,
   PROGRESSIVE,
+  RIGHT_OP,
+  rightOpAudioKey,
   type AnswerPayload,
+  type RightOpView,
   type AuctionView,
   type HigherLowerPick,
   type HigherLowerView,
@@ -90,7 +93,12 @@ export interface SessionState {
   higherLower: HigherLowerView | null;
   /** Mode Imposteur : manche en cours (sa chanson, mots, votes, éliminations). */
   impostor: ImpostorView | null;
-  /** Mode Plus ou moins : extrait en cours de lecture (index de la chanson, fin en heure serveur). */
+  /** Mode Le bon OP : l'anime de la manche, qui a répondu, son choix et son résultat. */
+  rightOp: RightOpView | null;
+  /**
+   * Modes Plus ou moins et Le bon OP : extrait en cours de lecture (index audio, fin
+   * en heure serveur). Le bon OP : l'extrait affiché est `index % RIGHT_OP.options`.
+   */
   clip: { index: number; endsAt: number } | null;
   /** Le navigateur a bloqué le son (pas de clic depuis le chargement de la page). */
   soundBlocked: boolean;
@@ -151,6 +159,7 @@ export class GameSession {
       auction: null,
       higherLower: null,
       impostor: null,
+      rightOp: null,
       clip: null,
       soundBlocked: false,
       end: null,
@@ -176,6 +185,9 @@ export class GameSession {
       'game:players': (players) => this.update({ players }),
       'auction:state': ({ round, view }) => this.onAuctionState(round, view),
       'impostor:state': ({ round, view }) => this.onImpostorState(round, view),
+      'rightOp:state': ({ round, view }) => {
+        if (round === this.state.round) this.update({ rightOp: view });
+      },
       'round:reveal': (reveal) => this.onReveal(reveal),
       'game:end': (end) => this.onEnd(end),
     };
@@ -376,6 +388,42 @@ export class GameSession {
     void this.playClip(index, 0);
   }
 
+  /**
+   * Le bon OP : réécouter un extrait, une fois son passage automatique terminé
+   * (à tout moment après une arrivée en cours de manche).
+   */
+  replayRightOp(slot: number): void {
+    const { round, phase } = this.state;
+    if (!this.isRightOp || phase !== 'listening' || !this.rightOpReplayable(slot)) return;
+    void this.playRightOpClip(rightOpAudioKey(round, slot), 0);
+  }
+
+  /** Le bon OP : l'extrait est déjà passé une fois (réécoute possible). */
+  rightOpReplayable(slot: number): boolean {
+    const start = this.listenStart;
+    if (!start || start.round !== this.state.round) return true;
+    return serverNow() >= start.startedAt + (slot + 1) * RIGHT_OP.snippetMs;
+  }
+
+  /** Le bon OP : choix d'un extrait (un seul essai) ; le résultat n'est connu que du joueur. */
+  async pickRightOp(index: number): Promise<void> {
+    const { rightOp, round, phase } = this.state;
+    if (!rightOp || rightOp.yourPick !== null || phase !== 'listening') return;
+    this.update({ rightOp: { ...rightOp, yourPick: index } });
+    const result = await socket
+      .timeout(5000)
+      .emitWithAck('rightOp:pick', { index })
+      .catch(() => null);
+    if (this.disposed || this.state.round !== round || !this.state.rightOp) return;
+    if (!result) {
+      this.update({ rightOp: { ...this.state.rightOp, yourPick: null } });
+      return;
+    }
+    if (result.correct) sfx.correct();
+    else sfx.wrong();
+    this.update({ rightOp: { ...this.state.rightOp, yourPick: index, yourResult: result } });
+  }
+
   /** Mode Progressif : réécouter l'extrait du palier en cours. */
   replay(): void {
     if (this.isProgressive && this.state.phase === 'listening' && this.canAnswer()) {
@@ -442,6 +490,8 @@ export class GameSession {
     if (this.isProgressive) void this.playTier();
     else if (this.isHigherLower && this.listenStart?.round === this.state.round) {
       this.scheduleClips(this.state.round, this.listenStart.startedAt);
+    } else if (this.isRightOp && this.listenStart?.round === this.state.round) {
+      this.scheduleRightOpClips(this.state.round, this.listenStart.startedAt);
     } else if (this.listenStart?.round === this.state.round) {
       this.audio.play(this.state.round, this.listenStart.startedAt);
     }
@@ -501,9 +551,16 @@ export class GameSession {
       auction: null,
       impostor: null,
       higherLower: snapshot.higherLower,
+      rightOp: snapshot.rightOp,
     });
     if (snapshot.auction) this.onAuctionState(snapshot.round, snapshot.auction);
     if (snapshot.impostor) this.onImpostorState(snapshot.round, snapshot.impostor);
+    // Le bon OP : les extraits encore à venir reprennent à l'heure prévue.
+    if (this.isRightOp && snapshot.phase === 'listening' && snapshot.listenStartedAt !== null) {
+      this.listenStart = { round: snapshot.round, startedAt: snapshot.listenStartedAt };
+      this.scheduleRightOpClips(snapshot.round, snapshot.listenStartedAt);
+      return;
+    }
     if (snapshot.phase === 'listening' && snapshot.listenStartedAt !== null) {
       this.pendingResume = { round: snapshot.round, startedAt: snapshot.listenStartedAt };
       this.video.preload(snapshot.round, snapshot.videoUrl);
@@ -530,6 +587,7 @@ export class GameSession {
       auction: null,
       impostor: null,
       higherLower: null,
+      rightOp: null,
       clip: null,
     });
     // Cloche « attention », puis un tic à chaque seconde restante.
@@ -575,6 +633,10 @@ export class GameSession {
       // Pas de vidéo : A puis B (tour 1), ou la nouvelle chanson, à l'heure du serveur.
       this.listenStart = { round, startedAt };
       this.scheduleClips(round, startedAt);
+    } else if (this.isRightOp) {
+      // Les 4 extraits à la suite, à l'heure du serveur ; la vidéo arrive par `round:video`.
+      this.listenStart = { round, startedAt };
+      this.scheduleRightOpClips(round, startedAt);
     } else if (this.isProgressive) {
       // Premier palier joué automatiquement, à l'heure fixée par le serveur ;
       // la vidéo se précharge au début de l'extrait.
@@ -733,6 +795,11 @@ export class GameSession {
    */
   private onVideo(round: number, url: string): void {
     if (round !== this.state.round || this.video.get(round) !== null) return;
+    // Le bon OP : la vidéo du bon générique part du début (les extraits n'en disent rien).
+    if (this.isRightOp) {
+      this.video.preload(round, url, 0);
+      return;
+    }
     const startTime = this.audio.startTime(round) ?? 0;
     const position =
       this.isProgressive || !this.listenStart
@@ -745,8 +812,14 @@ export class GameSession {
     // La vidéo se charge maintenant, à l'endroit où l'extrait en est (un peu plus loin :
     // le temps de charger) ; la jaquette s'affiche et l'extrait continue d'ici là.
     if (reveal.video && this.video.get(reveal.round) === null) {
-      const position = this.audio.position(reveal.round);
+      const position = this.isRightOp ? null : this.audio.position(reveal.round);
       this.video.preload(reveal.round, reveal.video, position ?? 0);
+    }
+    // Le bon OP : l'extrait en cours (réécoute) laisse la place à la vidéo.
+    if (this.isRightOp) {
+      this.clearClipTimers();
+      if (this.state.clip) this.audio.fadeOut(this.state.clip.index, 400);
+      this.update({ clip: null, snippetPlaying: false });
     }
     this.update({
       phase: 'reveal',
@@ -798,6 +871,50 @@ export class GameSession {
 
   private get isImpostor(): boolean {
     return this.state.settings.mode === 'impostor';
+  }
+
+  private get isRightOp(): boolean {
+    return this.state.settings.mode === 'rightOp';
+  }
+
+  /**
+   * Le bon OP : programme les 4 extraits à la suite à partir de `startedAt` (heure
+   * serveur). Un extrait déjà commencé (arrivée en retard) reprend en cours de route.
+   */
+  private scheduleRightOpClips(round: number, startedAt: number): void {
+    this.clearClipTimers();
+    for (let slot = 0; slot < RIGHT_OP.options; slot++) {
+      const delay = startedAt + slot * RIGHT_OP.snippetMs - serverNow();
+      const offsetMs = Math.max(0, -delay);
+      if (offsetMs >= RIGHT_OP.snippetMs) continue;
+      this.clipTimers.push(
+        window.setTimeout(
+          () => {
+            if (this.state.round === round && this.state.phase === 'listening') {
+              void this.playRightOpClip(rightOpAudioKey(round, slot), offsetMs);
+            }
+          },
+          Math.max(0, delay),
+        ),
+      );
+    }
+  }
+
+  /** Le bon OP : joue un extrait de 4 s (les autres extraits de la manche restent chargés). */
+  private async playRightOpClip(key: number, offsetMs: number): Promise<void> {
+    const round = this.state.round;
+    const snippet = ++this.snippetCount;
+    this.update({
+      snippetPlaying: true,
+      clip: { index: key, endsAt: serverNow() + RIGHT_OP.snippetMs - offsetMs },
+    });
+    await this.audio.playSnippet(key, RIGHT_OP.snippetMs, {
+      offsetMs,
+      keepFrom: rightOpAudioKey(round, 0),
+    });
+    if (!this.disposed && snippet === this.snippetCount && this.state.round === round) {
+      this.update({ snippetPlaying: false, clip: null });
+    }
   }
 
   /**

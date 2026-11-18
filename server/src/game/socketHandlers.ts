@@ -2,6 +2,7 @@ import type { Socket } from 'socket.io';
 import {
   isAuctionBid,
   isHigherLowerPick,
+  isRightOpSlot,
   sanitizePseudo,
   type ClientToServerEvents,
   type ServerToClientEvents,
@@ -107,6 +108,14 @@ export function registerSocketHandlers(socket: GameSocket, { games, rooms }: Man
     if (typeof ack !== 'function') return;
     const pick = (payload as { pick?: unknown } | null)?.pick;
     ack(isHigherLowerPick(pick) ? (games.gameOf(playerId)?.pick(playerId, pick) ?? false) : false);
+  });
+
+  socket.on('rightOp:pick', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    const index = (payload as { index?: unknown } | null)?.index;
+    ack(
+      isRightOpSlot(index) ? (games.gameOf(playerId)?.pickRightOp(playerId, index) ?? null) : null,
+    );
   });
 
   socket.on('impostor:word', (payload, ack) => {

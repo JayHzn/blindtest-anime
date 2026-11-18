@@ -225,6 +225,27 @@ Validé le 2026-11-17 (maquette : https://claude.ai/artifact/XB4rhpAbMMXY5yeoM9R
   - le score d'un joueur compte ses bonnes réponses ; `eliminatedAt` (tour d'élimination, 0 pour un spectateur arrivé en cours de partie) sert au classement ;
   - un audio injouable (pas encore joué) est remplacé en retirant la suite de la chaîne à partir de lui, pour que chaque écart reste respecté.
 
+### Le bon OP (v2, solo et multi, « blindtest à l'envers »)
+
+Validé le 2026-11-18 (maquette : https://claude.ai/artifact/34ZnCjCJwuGLHDkHkoEJZr), mis en œuvre le 2026-11-19.
+
+- **Principe** : on voit un anime (titre, jaquette, OP ou ED, sans numéro) ; il faut retrouver son générique parmi 4 extraits du même type. Pas de réponse tapée.
+- **Pièges** (3 par manche) : autres séries proches, mêmes règles que l'Imposteur : même type, années à 5 ans près, popularité à ×2,5 près, même genre si possible (un peu de hasard parmi les 8 plus proches) ; à défaut, les plus proches en popularité, du même type. Jamais deux fois la même franchise dans la partie (ni entre la chanson et ses pièges). Ordre des 4 extraits tiré au hasard.
+- **Écoute** : 4 extraits de 4 s joués à la suite (16 s), **sans chrono** ; chaque extrait part d'un point tiré entre 0 et 60 % du morceau.
+- **Décompte** : 15 s après les extraits, **réécoute libre** (un extrait est réécoutable une fois son passage terminé). Environ 31 s par manche.
+- **Choix** : un seul essai, possible à tout moment ; un clic sur la carte ne valide jamais (boutons « Réécouter » et « Choisir » séparés). 200 points pendant l'écoute, puis de 200 à 50 pendant le décompte (linéaire), 0 si c'est faux. Pas de bonus de précision.
+- **Retour** immédiat au joueur seul (« Bien joué ! +162 » ou « Raté »).
+- **Multi** : comme le Classique, tout le monde entend les mêmes extraits ; on voit qui a répondu (« a répondu » / « réfléchit… »), jamais quoi ; **les scores ne bougent qu'à la révélation** (sinon on devinerait qui a juste) ; la révélation arrive dès que tout le monde a répondu. On peut réécouter après avoir répondu.
+- **Révélation** (10 s) : vidéo du bon générique (plus petite que dans les autres modes) et les 4 cartes retournées : titre de l'anime, chanson et année de chacune, la bonne en menthe, son choix faux en rose, avatars de qui a choisi quoi.
+- **Réglages** : manches (10 par défaut, réglables) ; les filtres de la partie s'appliquent à la chanson et aux pièges ; avec OP et ED cochés, chaque manche prend le type de sa chanson.
+- Détails (mise en œuvre) :
+  - au lancement, toutes les manches sont tirées (chanson + 3 pièges), plus 3 de rechange (chacune prend 4 séries) ;
+  - chaque extrait a son propre audio opaque (miroir R2 ou proxy) et un index audio `manche × 4 + extrait` ; les 4 extraits de la manche suivante se préchargent pendant la manche en cours (environ 5 Mo par manche) ;
+  - la manche attend que les 4 extraits soient prêts chez chacun (mêmes délais d'attente que les autres modes), puis **démarre pour tout le monde** : un extrait encore en chargement est muet à son passage, puis réécoutable ;
+  - un extrait injouable avant la manche : par le proxy du serveur si c'était le miroir, sinon la manche entière est remplacée par une manche de rechange ;
+  - le serveur arbitre le choix (`rightOp:pick`) et ne renvoie le résultat qu'au joueur ; `rightOp:state` (au compte à rebours et à chaque réponse) donne l'anime, qui a répondu, et son propre choix ; rien ne dit quel extrait est le bon avant la révélation ;
+  - la vidéo du bon générique est envoyée à tous dès le début de l'écoute (l'anime est affiché, elle ne dit pas quel extrait est le bon) et se précharge depuis le début.
+
 ### Imposteur (v2, multi uniquement, style Undercover)
 
 Validé le 2026-11-18 (maquette : https://claude.ai/artifact/DHKrGNmaYzFKQJXyiMA3Uz), mis en œuvre le même jour.

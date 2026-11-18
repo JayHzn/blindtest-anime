@@ -18,6 +18,13 @@ import {
   pickOpensAfterMs,
   popularityRatio,
   ratioWindow,
+  RIGHT_OP,
+  rightOpAudioKey,
+  rightOpPoints,
+  rightOpSlotOf,
+  type RightOpPickResult,
+  type RightOpReveal,
+  type RightOpView,
   type AnswerPayload,
   type AnswerResult,
   type GameEndReason,
@@ -132,6 +139,21 @@ interface RoundState {
   impostors: string[];
   /** Imposteur : indices, votes, éliminations (créé à la fin du compte à rebours). */
   impostor: ImpostorRound | null;
+  /**
+   * Le bon OP : les 4 extraits dans l'ordre affiché (la chanson à trouver est à
+   * `answerIndex`, mêlée à 3 pièges), et le choix de chaque joueur.
+   */
+  options: RightOpOptionState[] | null;
+  answerIndex: number;
+  rightOpPicks: Map<string, number>;
+}
+
+/** Le bon OP : un extrait proposé (audio opaque, point de départ). */
+interface RightOpOptionState {
+  theme: ThemeRow;
+  token: string;
+  audioUrl: string;
+  startRatio: number;
 }
 
 export interface GameOptions {
@@ -149,6 +171,8 @@ export interface GameOptions {
   choosers?: string[][];
   /** Imposteur : chanson de l'imposteur de chaque manche (aligné sur `themes`). */
   impostorThemes?: ThemeRow[];
+  /** Le bon OP : les 3 pièges de chaque manche (aligné sur `themes`). */
+  rightOpTraps?: ThemeRow[][];
   /** Miroir audio (R2) : l'audio des chansons copiées n'y passe plus par le serveur. */
   mirror?: AudioMirror | null;
   random?: () => number;
@@ -188,6 +212,8 @@ export class Game {
   private readonly spares: ThemeRow[];
   /** Imposteur : chansons d'imposteur des musiques de rechange (alignées sur `spares`). */
   private readonly impostorSpares: ThemeRow[];
+  /** Le bon OP : pièges des manches de rechange (alignés sur `spares`). */
+  private readonly rightOpSpares: ThemeRow[][];
   private phase: GamePhase = 'countdown';
   private roundIndex = 0;
   private phaseEndsAt = 0;
@@ -227,10 +253,16 @@ export class Game {
     this.rounds = options.themes
       .slice(0, total)
       .map((theme, index) =>
-        this.createRound(theme, options.choosers?.[index] ?? [], options.impostorThemes?.[index]),
+        this.createRound(
+          theme,
+          options.choosers?.[index] ?? [],
+          options.impostorThemes?.[index],
+          options.rightOpTraps?.[index],
+        ),
       );
     this.spares = options.themes.slice(total);
     this.impostorSpares = options.impostorThemes?.slice(total) ?? [];
+    this.rightOpSpares = options.rightOpTraps?.slice(total) ?? [];
   }
 
   get totalRounds(): number {
@@ -367,7 +399,71 @@ export class Game {
         round?.impostor && this.phase !== 'reveal' && this.phase !== 'finished'
           ? round.impostor.view(forPlayer)
           : null,
+      rightOp: this.isRightOp && round ? this.rightOpView(round, forPlayer) : null,
     };
+  }
+
+  /** Le bon OP : l'anime de la manche, qui a répondu, son choix et son résultat (à lui seul). */
+  private rightOpView(round: RoundState, playerId: string): RightOpView {
+    const anime = this.catalogue.getAnime(round.theme.animeId)!;
+    const pick = round.rightOpPicks.get(playerId);
+    const result = round.results.get(playerId);
+    return {
+      anime: {
+        title: {
+          fr: this.catalogue.animeTitle(anime, 'fr'),
+          en: this.catalogue.animeTitle(anime, 'en'),
+        },
+        coverUrl: anime.coverUrl,
+        coverColor: anime.coverColor,
+        type: round.theme.type,
+      },
+      answered: [...round.rightOpPicks.keys()],
+      yourPick: pick ?? null,
+      yourResult: result ? { correct: result.correct, points: result.points } : null,
+    };
+  }
+
+  private broadcastRightOp(): void {
+    const round = this.rounds[this.roundIndex];
+    if (!this.isRightOp || !round) return;
+    for (const id of this.players.keys()) {
+      this.emitter.toPlayer(id, 'rightOp:state', {
+        round: this.roundIndex,
+        view: this.rightOpView(round, id),
+      });
+    }
+  }
+
+  /**
+   * Le bon OP : choix d'un extrait, un seul essai, pendant son temps de manche.
+   * Le résultat n'est renvoyé qu'au joueur ; les scores bougent à la révélation.
+   */
+  pickRightOp(playerId: string, index: number): RightOpPickResult {
+    const round = this.rounds[this.roundIndex];
+    if (!this.isRightOp || !round?.options || this.phase !== 'listening') return null;
+    if (!this.players.get(playerId)?.connected || !round.participants.has(playerId)) return null;
+    if (round.rightOpPicks.has(playerId) || index < 0 || index >= round.options.length) return null;
+    const startedAt = round.starts.get(playerId);
+    const now = Date.now();
+    if (startedAt === undefined || now > startedAt + this.listenMs) return null;
+    const elapsedMs = Math.max(0, now - startedAt);
+    const correct = index === round.answerIndex;
+    const points = correct ? rightOpPoints(elapsedMs) : 0;
+    round.rightOpPicks.set(playerId, index);
+    round.results.set(playerId, {
+      playerId,
+      correct,
+      points,
+      elapsedMs,
+      seasonExact: false,
+      sequenceExact: false,
+      tier: null,
+    });
+    this.broadcastRightOp();
+    this.broadcastPlayers();
+    if (this.everyoneDone()) this.onEveryoneDone();
+    return { correct, points };
   }
 
   /** Plus ou moins : tour en cours vu par un joueur (référence en clair, écart, son choix). */
@@ -413,8 +509,7 @@ export class Game {
   /** Le navigateur du joueur a préchargé l'audio de la manche. */
   audioReady(playerId: string, round: number, url: string): void {
     const player = this.players.get(playerId);
-    const target = this.rounds[round];
-    if (!player || !target || url !== this.audioUrlFor(target, playerId)) return;
+    if (!player || url !== this.expectedAudioUrl(round, playerId)) return;
     player.ready.set(round, url);
     if (this.isAuction || this.isImpostor) {
       if (round === this.roundIndex) this.rounds[round]!.auction?.audioReady(playerId);
@@ -446,6 +541,10 @@ export class Game {
 
   /** L'audio n'a pas pu être chargé : on remplace la musique tant que la manche n'a pas commencé. */
   audioFailed(playerId: string, round: number, url: string): void {
+    if (this.isRightOp) {
+      this.rightOpAudioFailed(playerId, round, url);
+      return;
+    }
     const target = this.rounds[round];
     if (!this.players.has(playerId) || !target || url !== this.audioUrlFor(target, playerId)) {
       return;
@@ -480,10 +579,50 @@ export class Game {
     this.emitPrepare(round);
   }
 
+  /**
+   * Le bon OP : un extrait injouable (pas encore joué). Fichier du miroir : même
+   * chanson par le proxy du serveur ; sinon la manche entière est remplacée.
+   */
+  private rightOpAudioFailed(playerId: string, key: number, url: string): void {
+    if (!this.players.has(playerId) || url !== this.expectedAudioUrl(key, playerId)) return;
+    const { round: index, slot } = rightOpSlotOf(key);
+    const target = this.rounds[index]!;
+    const notStartedYet =
+      index > this.roundIndex || (index === this.roundIndex && this.phase === 'countdown');
+    if (!notStartedYet || !target.options) return;
+    const option = target.options[slot]!;
+    if (this.mirror?.isMirrorUrl(url)) {
+      option.audioUrl = audioPath(option.token);
+      if (option.token === target.token) target.audioUrl = option.audioUrl;
+      for (const player of this.players.values()) player.ready.delete(key);
+      this.broadcast('round:prepare', {
+        round: key,
+        url: option.audioUrl,
+        startRatio: option.startRatio,
+      });
+      return;
+    }
+    const replacement = this.spares.shift();
+    const traps = this.rightOpSpares.shift();
+    this.revokeRound(target);
+    if (!replacement || !traps) {
+      this.handleNoReplacement(index);
+      return;
+    }
+    this.rounds[index] = this.createRound(replacement, [], undefined, traps);
+    for (const player of this.players.values()) {
+      for (let s = 0; s < RIGHT_OP.options; s++) player.ready.delete(rightOpAudioKey(index, s));
+    }
+    this.emitPrepare(index);
+    if (index === this.roundIndex) this.broadcastRightOp();
+  }
+
   answer(playerId: string, payload: AnswerPayload): AnswerResult {
     const player = this.players.get(playerId);
     if (!player || !player.connected) return { accepted: false, reason: 'not_in_game' };
     const round = this.rounds[this.roundIndex]!;
+    // Le bon OP : on choisit un extrait (`pickRightOp`), on ne tape pas de titre.
+    if (this.isRightOp) return { accepted: false, reason: 'not_listening' };
     // Imposteur : seuls les civils gagnants devinent la chanson de l'imposteur (un essai).
     if (this.isImpostor) {
       return (
@@ -736,6 +875,23 @@ export class Game {
     return this.settings.mode === 'impostor';
   }
 
+  private get isRightOp(): boolean {
+    return this.settings.mode === 'rightOp';
+  }
+
+  /**
+   * Adresse audio attendue pour un index audio (`null` : index inconnu). Le bon OP :
+   * l'index désigne un des 4 extraits d'une manche (`rightOpAudioKey`).
+   */
+  private expectedAudioUrl(key: number, playerId: string): string | null {
+    if (this.isRightOp) {
+      const { round, slot } = rightOpSlotOf(key);
+      return this.rounds[round]?.options?.[slot]?.audioUrl ?? null;
+    }
+    const round = this.rounds[key];
+    return round ? this.audioUrlFor(round, playerId) : null;
+  }
+
   /** Imposteur : l'imposteur reçoit l'audio de sa chanson ; les autres celui des civils. */
   private audioUrlFor(round: RoundState, playerId: string): string {
     return this.isImpostorOf(round, playerId) ? round.impostorAudioUrl! : round.audioUrl;
@@ -756,13 +912,19 @@ export class Game {
 
   /** Audios joués pendant la manche en cours (Plus ou moins, tour 1 : A et B). */
   private roundAudio(): number[] {
+    // Le bon OP : les 4 extraits de la manche.
+    if (this.isRightOp) {
+      return Array.from({ length: RIGHT_OP.options }, (_, slot) =>
+        rightOpAudioKey(this.roundIndex, slot),
+      );
+    }
     return this.isHigherLower && this.roundIndex === 1 ? [0, 1] : [this.roundIndex];
   }
 
   private isPlayerReady(player: PlayerState): boolean {
-    return this.roundAudio().every((index) => {
-      const round = this.rounds[index];
-      return round !== undefined && player.ready.get(index) === this.audioUrlFor(round, player.id);
+    return this.roundAudio().every((key) => {
+      const url = this.expectedAudioUrl(key, player.id);
+      return url !== null && player.ready.get(key) === url;
     });
   }
 
@@ -808,6 +970,8 @@ export class Game {
       index === firstRound(this.settings.mode) ? this.introMs : this.timing.countdownMs;
     this.phaseEndsAt = Date.now() + duration;
     this.broadcast('round:countdown', { round: index, phaseEndsAt: this.phaseEndsAt });
+    // Le bon OP : l'anime de la manche s'affiche dès le compte à rebours.
+    this.broadcastRightOp();
     this.schedule(duration, () => this.afterCountdown());
   }
 
@@ -843,7 +1007,11 @@ export class Game {
     for (const player of this.connectedPlayers()) {
       // Plus ou moins : les éliminés écoutent sans répondre.
       if (!this.eliminatedAt.has(player.id)) round.participants.add(player.id);
-      if (this.isPlayerReady(player)) this.startPlayer(round, player.id, startsAt);
+      // Le bon OP : 4 extraits à charger ; après l'attente, tout le monde démarre quand
+      // même (un extrait encore en chargement est muet à son passage, puis réécoutable).
+      if (this.isPlayerReady(player) || this.isRightOp) {
+        this.startPlayer(round, player.id, startsAt);
+      }
     }
     // Préchargement de la manche suivante pendant l'écoute.
     if (!this.preparedRounds.has(this.roundIndex + 1)) this.emitPrepare(this.roundIndex + 1);
@@ -1047,8 +1215,11 @@ export class Game {
       ...(this.isPlaylist && { ownSong: round.choosers.includes(playerId) }),
       ...(this.isHigherLower && { higherLower: this.higherLowerView(round, playerId) }),
     });
-    // Playlist : qui a choisi la chanson la connaît déjà.
-    if (this.isPlaylist && round.choosers.includes(playerId)) this.sendVideo(round, playerId);
+    // Playlist : qui a choisi la chanson la connaît déjà. Le bon OP : l'anime est
+    // affiché, la vidéo ne dit pas quel extrait est le bon : préchargée dès le départ.
+    if ((this.isPlaylist && round.choosers.includes(playerId)) || this.isRightOp) {
+      this.sendVideo(round, playerId);
+    }
   }
 
   /**
@@ -1067,11 +1238,13 @@ export class Game {
     const round = this.rounds[this.roundIndex]!;
     const playlist = this.isPlaylist ? this.settlePlaylist(round) : undefined;
     const higherLower = this.isHigherLower ? this.settleHigherLower(round) : undefined;
+    const rightOp = this.isRightOp ? this.settleRightOp(round) : undefined;
     this.phase = 'reveal';
     this.phaseEndsAt = Date.now() + this.timing.revealMs;
     this.lastReveal = this.buildReveal();
     if (playlist) this.lastReveal.playlist = playlist;
     if (higherLower) this.lastReveal.higherLower = higherLower;
+    if (rightOp) this.lastReveal.rightOp = rightOp;
     this.broadcast('round:reveal', this.lastReveal);
     this.schedule(this.timing.revealMs, () => {
       if (!higherLower?.gameOver && this.roundIndex + 1 < this.rounds.length) {
@@ -1080,6 +1253,35 @@ export class Game {
         this.finish('completed');
       }
     });
+  }
+
+  /**
+   * Le bon OP : les points comptent à la révélation (pendant la manche, voir un
+   * score monter dirait aux autres qui a juste). Les 4 extraits sont retournés.
+   */
+  private settleRightOp(round: RoundState): RightOpReveal {
+    for (const result of round.results.values()) {
+      const player = this.players.get(result.playerId);
+      if (player) player.score += result.points;
+    }
+    const options = round.options ?? [];
+    return {
+      options: options.map((option, index) => {
+        const anime = this.catalogue.getAnime(option.theme.animeId)!;
+        return {
+          title: {
+            fr: this.catalogue.animeTitle(anime, 'fr'),
+            en: this.catalogue.animeTitle(anime, 'en'),
+          },
+          song: option.theme.songTitle,
+          artists: option.theme.artists,
+          year: anime.year,
+          correct: index === round.answerIndex,
+        };
+      }),
+      answer: round.answerIndex,
+      picks: [...round.rightOpPicks].map(([playerId, index]) => ({ playerId, index })),
+    };
   }
 
   private finish(reason: GameEndReason): void {
@@ -1244,14 +1446,42 @@ export class Game {
     theme: ThemeRow,
     choosers: string[] = [],
     impostorTheme?: ThemeRow,
+    rightOpTraps?: ThemeRow[],
   ): RoundState {
     const token = this.media.register(theme.audioUrl);
     const impostorToken = impostorTheme ? this.media.register(impostorTheme.audioUrl) : null;
+    const audioUrl = this.mirror?.urlFor(theme.id) ?? audioPath(token);
+    const startRatio = Math.round(this.random() * START_RATIO_MAX * 1000) / 1000;
+    // Le bon OP : la chanson à trouver, mêlée à ses 3 pièges (chacun son point de départ).
+    let options: RightOpOptionState[] | null = null;
+    let answerIndex = 0;
+    if (rightOpTraps) {
+      options = [
+        { theme, token, audioUrl, startRatio },
+        ...rightOpTraps.map((trap) => {
+          const trapToken = this.media.register(trap.audioUrl);
+          return {
+            theme: trap,
+            token: trapToken,
+            audioUrl: this.mirror?.urlFor(trap.id) ?? audioPath(trapToken),
+            startRatio: Math.round(this.random() * START_RATIO_MAX * 1000) / 1000,
+          };
+        }),
+      ];
+      for (let i = options.length - 1; i > 0; i--) {
+        const j = Math.floor(this.random() * (i + 1));
+        [options[i], options[j]] = [options[j]!, options[i]!];
+      }
+      answerIndex = options.findIndex((option) => option.theme === theme);
+    }
     return {
       theme,
       token,
-      audioUrl: this.mirror?.urlFor(theme.id) ?? audioPath(token),
-      startRatio: Math.round(this.random() * START_RATIO_MAX * 1000) / 1000,
+      audioUrl,
+      startRatio,
+      options,
+      answerIndex,
+      rightOpPicks: new Map(),
       videoToken: null,
       listenStartedAt: null,
       participants: new Set(),
@@ -1281,12 +1511,28 @@ export class Game {
     this.media.revoke(round.token);
     if (round.videoToken) this.media.revoke(round.videoToken);
     if (round.impostorToken) this.media.revoke(round.impostorToken);
+    for (const option of round.options ?? []) {
+      if (option.token !== round.token) this.media.revoke(option.token);
+    }
+  }
+
+  /** Le bon OP : audio des 4 extraits d'une manche (un index audio chacun). */
+  private rightOpAudios(index: number): RoundAudio[] {
+    return (this.rounds[index]?.options ?? []).map((option, slot) => ({
+      round: rightOpAudioKey(index, slot),
+      url: option.audioUrl,
+      startRatio: option.startRatio,
+    }));
   }
 
   private emitPrepare(index: number): void {
     const round = this.rounds[index];
     if (!round) return;
     this.preparedRounds.add(index);
+    if (this.isRightOp) {
+      for (const audio of this.rightOpAudios(index)) this.broadcast('round:prepare', audio);
+      return;
+    }
     if (this.isImpostor) {
       // Les rôles sont tirés à l'envoi de l'audio : chacun reçoit celui de sa chanson.
       if (!round.roleHolders) this.drawRoles(round);
@@ -1314,7 +1560,7 @@ export class Game {
     const franchise = this.catalogue.getFranchise(anime.franchiseId)!;
     const { auction, impostor } = round;
     // Modes où l'on tape un titre (Classique, Progressif, Playlist) : réponse et bonus possibles.
-    const answersTitles = !auction && !impostor && !this.isHigherLower;
+    const answersTitles = !auction && !impostor && !this.isHigherLower && !this.isRightOp;
     const results = [...this.players.values()].map(
       (player): PlayerRoundResult =>
         auction?.resultFor(player.id) ??
@@ -1394,6 +1640,11 @@ export class Game {
     for (const index of [...this.preparedRounds].sort((a, b) => a - b)) {
       const round = this.rounds[index];
       if (index < from || !round) continue;
+      if (this.isRightOp) {
+        for (const audio of this.rightOpAudios(index))
+          this.emitter.toPlayer(id, 'round:prepare', audio);
+        continue;
+      }
       this.emitter.toPlayer(id, 'round:prepare', {
         round: index,
         url: this.audioUrlFor(round, id),
@@ -1445,7 +1696,11 @@ export class Game {
             ? round.auction.hasFound(player.id)
             : this.isHigherLower
               ? (round?.picks.has(player.id) ?? false)
-              : (round?.results.get(player.id)?.correct ?? false)),
+              : // Le bon OP : pendant la manche, la coche indique qui a répondu (jamais
+                // s'il a juste) ; à la révélation, qui a trouvé.
+                this.isRightOp && (this.phase === 'countdown' || this.phase === 'listening')
+                ? (round?.rightOpPicks.has(player.id) ?? false)
+                : (round?.results.get(player.id)?.correct ?? false)),
         connected: player.connected,
         ...(eliminatedAt !== undefined && { eliminatedAt }),
       };
@@ -1474,7 +1729,8 @@ export class Game {
         (player) =>
           round.results.get(player.id)?.correct ||
           round.progress.get(player.id)?.eliminated ||
-          round.picks.has(player.id),
+          round.picks.has(player.id) ||
+          round.rightOpPicks.has(player.id),
       );
   }
 

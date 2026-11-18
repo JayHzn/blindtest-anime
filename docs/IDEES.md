@@ -16,7 +16,7 @@ Ce qui ne nous différencie PAS : multi temps réel, filtres, révélation vidé
 
 ## Concepts validés
 
-Les modes Playlist des joueurs, Enchères, Plus ou moins et Imposteur sont passés dans DECISIONS.md (v2).
+Les modes Playlist des joueurs, Enchères, Plus ou moins, Imposteur et Le bon OP sont passés dans DECISIONS.md (v2).
 
 ### Mode Soirée (style Kahoot)
 
@@ -96,8 +96,6 @@ Les modes Playlist des joueurs, Enchères, Plus ou moins et Imposteur sont pass�
 
 ## Retenus, règles à définir
 
-- **Quel est le bon OP ? (blindtest à l'envers)** : on voit le titre d'un anime, on écoute 4 courts extraits, il faut retrouver le sien. Les 3 autres sont des chansons proches (même tirage que l'Imposteur : même type, même époque, popularité voisine). Solo et multi ; peut servir de mode Facile.
-  - À trancher : durée des extraits, réécoute libre ou limitée, points selon la rapidité ou fixes, un essai ou plusieurs, OP et ED mélangés.
 - **Chronologie** : 4 extraits à remettre dans l'ordre de sortie de l'anime, sur une frise. Solo et multi ; les années sont déjà dans le catalogue.
   - À trancher : nombre de chansons (4, 5 ?), points par chanson bien placée ou tout-ou-rien, départage des animes de la même année (saison ?), afficher les titres ou seulement le son.
 - **Likes et playlist** : liker les chansons entendues pendant les parties pour se faire sa propre playlist, à exporter vers Spotify ou YouTube Music.

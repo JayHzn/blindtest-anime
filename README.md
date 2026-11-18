@@ -10,7 +10,7 @@ Le blindtest des openings et endings d'anime, à jouer seul ou entre potes.
 
 ### Réglages
 
-- **Mode** : Classique, Progressif ou Plus ou moins, et en room Playlist des joueurs, Enchères ou Imposteur (voir plus bas).
+- **Mode** : Classique, Progressif, Plus ou moins ou Le bon OP, et en room Playlist des joueurs, Enchères ou Imposteur (voir plus bas).
 - **Manches** : 5, 10, 15 ou 20 (en Playlist des joueurs : nombre de chansons par joueur, de 1 à 10 ; pas de manches en Plus ou moins).
 - **Durée du vote** (Imposteur) : 15, 20, 30 ou 45 secondes.
 - **Popularité** : Top 100, Top 500, Top 2000 ou tout le catalogue (selon le nombre de fans sur AniList).
@@ -58,6 +58,19 @@ La chanson vient-elle d'un anime **plus ou moins populaire** ? La popularité, c
 - L'écart entre les deux animes se resserre au fil des tours : au moins ×1,5 (tours 1 à 3), entre ×1,3 et ×3 (4 à 6), entre ×1,2 et ×2 (7 à 9), puis entre ×1,1 et ×1,5.
 - 30 tours au plus. Jamais deux fois la même série dans une partie.
 - **À plusieurs** : tu vois qui a répondu, jamais quoi. Si tout le monde se trompe au même tour, personne n'est éliminé. Les éliminés regardent la suite (son et révélations) sans répondre. Le dernier encore en jeu gagne ; après 30 tours, ceux qui restent finissent ex æquo. Classement : selon le tour d'élimination, puis le nombre de bonnes réponses.
+
+### Le bon OP
+
+Le blindtest à l'envers : tu connais l'anime, retrouve son générique.
+
+1. **L'anime** s'affiche : titre, jaquette, et s'il faut trouver son opening ou son ending.
+2. **L'écoute** : 4 extraits de 4 secondes passent à la suite (A, B, C, D). Un seul est le bon ; les 3 autres viennent d'animes proches (même type, même époque, popularité voisine).
+3. **Le décompte** : quand les 4 extraits sont passés, tu as encore 15 secondes pour choisir. Tu peux **réécouter** chaque extrait autant que tu veux.
+4. **Un seul essai** : choisir pendant l'écoute des extraits rapporte **200 points** ; pendant le décompte, les points baissent **de 200 à 50**. Mauvais choix ou pas de réponse : 0 point.
+5. **Révélation** : la vidéo du bon générique, et les 4 extraits retournés avec le titre de chaque anime.
+
+- Pas de bonus de précision dans ce mode.
+- **À plusieurs** : tu vois qui a répondu, jamais quoi ; les scores ne bougent qu'à la révélation, où l'on voit qui a choisi quel extrait.
 
 ### Playlist des joueurs (à partir de 3 joueurs)
 

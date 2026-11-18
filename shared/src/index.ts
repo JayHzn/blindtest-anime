@@ -5,6 +5,7 @@ export * from './game';
 export * from './higherLower';
 export * from './impostor';
 export * from './playlist';
+export * from './rightOp';
 export * from './room';
 export * from './search';
 export * from './socket';

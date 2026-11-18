@@ -12,6 +12,7 @@ import { useI18n } from '../../i18n/context';
 import { avatarColor } from '../../lib/avatar';
 import { isBuffered } from '../../lib/videoPreloader';
 import { AnswerRecap } from './AnswerRecap';
+import { RightOpCards, RightOpVerdict } from './RightOp';
 import styles from './RevealPanel.module.css';
 
 /** Avance prise sur l'extrait quand la vidéo doit encore charger la bonne portion. */
@@ -45,7 +46,8 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
 
     // Enchaînement sur l'extrait : position exacte si elle est déjà téléchargée,
     // sinon un peu en avance (le temps de charger), l'extrait continuant entre-temps.
-    const position = session.audio.position(round);
+    // Le bon OP : la vidéo part du début (l'audio de la manche est indexé par extrait).
+    const position = reveal.rightOp ? null : session.audio.position(round);
     if (position !== null) {
       element.currentTime = isBuffered(element, position) ? position : position + LOADING_LEAD_S;
     }
@@ -71,7 +73,7 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
       element.pause();
       element.remove();
     };
-  }, [reveal.round, session]);
+  }, [reveal.round, reveal.rightOp, session]);
 
   const mine = reveal.results.find((result) => result.playerId === you);
   const recap = Boolean(reveal.bonuses && mine && !mine.auction && !mine.playlist?.ownSong);
@@ -85,6 +87,7 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
         styles.panel,
         reveal.playlist ? styles.withPlaylist : '',
         recap ? styles.withRecap : '',
+        reveal.rightOp ? styles.withRightOp : '',
       ].join(' ')}
     >
       <div className={styles.media}>
@@ -128,8 +131,13 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
         {/* Ta réponse face à la bonne, et détail des points (modes où l'on tape un titre). */}
         {recap && mine ? <AnswerRecap reveal={reveal} result={mine} /> : null}
 
+        {/* Le bon OP : les 4 extraits retournés, et qui a choisi quoi. */}
+        {reveal.rightOp ? <RightOpCards reveal={reveal} you={you} /> : null}
+
         <div className={styles.footer}>
-          {recap ? null : mine?.auction ? (
+          {recap ? null : reveal.rightOp ? (
+            <RightOpVerdict reveal={reveal} you={you} />
+          ) : mine?.auction ? (
             <AuctionOutcome result={mine} />
           ) : mine?.playlist?.ownSong ? (
             <span className={[styles.result, styles.own].join(' ')}>

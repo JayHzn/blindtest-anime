@@ -3,7 +3,7 @@ import { AppHeader } from '../components/AppHeader';
 import { Vinyl } from '../components/Vinyl';
 import { AnswerForm } from '../components/game/AnswerForm';
 import { AuctionStage } from '../components/game/AuctionStage';
-import { GameSidebar } from '../components/game/GameSidebar';
+import { GameSidebar, type PlayerBadge } from '../components/game/GameSidebar';
 import {
   ImpostorReveal,
   ImpostorSidebar,
@@ -17,6 +17,7 @@ import {
   StreakPill,
 } from '../components/game/HigherLower';
 import { RevealPanel } from '../components/game/RevealPanel';
+import { RightOpStage } from '../components/game/RightOp';
 import { RoundDots } from '../components/game/RoundDots';
 import { TierControls } from '../components/game/TierControls';
 import { TimerBar } from '../components/game/TimerBar';
@@ -46,6 +47,7 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
   const auctionMode = state.settings.mode === 'auction';
   const higherLowerMode = state.settings.mode === 'higherLower';
   const impostorMode = state.settings.mode === 'impostor';
+  const rightOpMode = state.settings.mode === 'rightOp';
 
   const quit = () => {
     if (window.confirm(t('game.quit.confirm'))) onQuit();
@@ -125,7 +127,14 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
           {impostorMode && phase === 'reveal' && state.reveal ? (
             <ImpostorReveal session={session} reveal={state.reveal} state={state} now={now} />
           ) : null}
-          {!auctionMode && !higherLowerMode && !impostorMode && phase === 'listening' ? (
+          {rightOpMode && phase === 'listening' ? (
+            <RightOpStage session={session} state={state} now={now} />
+          ) : null}
+          {!auctionMode &&
+          !higherLowerMode &&
+          !impostorMode &&
+          !rightOpMode &&
+          phase === 'listening' ? (
             <ListeningStage session={session} state={state} now={now} />
           ) : null}
           {higherLowerMode && phase === 'reveal' && state.reveal ? (
@@ -158,13 +167,31 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
                     state.players.map((player) => player.id),
                     t,
                   )
-                : undefined
+                : rightOpMode && state.rightOp && phase === 'listening' && state.players.length > 1
+                  ? rightOpBadges(state.rightOp.answered, state.players, t)
+                  : undefined
             }
           />
         )}
       </div>
     </div>
   );
+}
+
+/** Le bon OP, en multi : qui a répondu (jamais quoi), qui réfléchit encore. */
+function rightOpBadges(
+  answered: string[],
+  players: SessionState['players'],
+  t: ReturnType<typeof useI18n>['t'],
+): Record<string, PlayerBadge> {
+  const badges: Record<string, PlayerBadge> = {};
+  for (const player of players) {
+    if (!player.connected) continue;
+    badges[player.id] = answered.includes(player.id)
+      ? { label: t('rightOp.answered'), tone: 'ok' }
+      : { label: t('rightOp.thinking'), tone: 'wait' };
+  }
+  return badges;
 }
 
 function CountdownStage({ state, now }: { state: SessionState; now: number }) {

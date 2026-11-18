@@ -23,6 +23,7 @@ import type {
 import type { HigherLowerPick, HigherLowerView } from './higherLower';
 import type { ImpostorView, ImpostorWordError } from './impostor';
 import type { PlaylistPickResponse, PlaylistPreview, PlaylistSongsResponse } from './playlist';
+import type { RightOpPickResult, RightOpView } from './rightOp';
 import type { RoomError, RoomResponse, RoomState } from './room';
 
 export type StartGameResponse =
@@ -73,6 +74,8 @@ export interface ServerToClientEvents {
   'auction:state': (payload: { round: number; view: AuctionView }) => void;
   /** Imposteur : état de la manche (mots, votes, éliminations…) à chaque changement. */
   'impostor:state': (payload: { round: number; view: ImpostorView }) => void;
+  /** Le bon OP : état de la manche (anime, qui a répondu) au compte à rebours et à chaque réponse. */
+  'rightOp:state': (payload: { round: number; view: RightOpView }) => void;
   /** Fin de la manche : réponse et résultats. */
   'round:reveal': (reveal: RoundReveal) => void;
   /** Fin de la partie. */
@@ -104,6 +107,8 @@ export interface ClientToServerEvents {
   'auction:replay': (ack: (left: number | null) => void) => void;
   /** Plus ou moins : choix définitif pour la nouvelle chanson (false : refusé). */
   'higherLower:pick': (payload: { pick: HigherLowerPick }, ack: (ok: boolean) => void) => void;
+  /** Le bon OP : choix d'un extrait (index 0 à 3), un seul essai ; renvoie le résultat au joueur. */
+  'rightOp:pick': (payload: { index: number }, ack: (result: RightOpPickResult) => void) => void;
   /** Imposteur : le mot du joueur qui a la parole (refusé : la raison). */
   'impostor:word': (
     payload: { word: string },

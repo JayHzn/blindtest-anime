@@ -570,6 +570,49 @@ export const fr = {
     'Chacun donne un mot sur sa chanson, puis on vote : le plus voté est éliminé et son rôle révélé.',
   'setup.rules.impostor.3':
     'Civils : +100 s’ils démasquent tous les imposteurs (+100 pour deviner sa chanson). Imposteur : +300 s’il tient.',
+
+  // Le bon OP
+  'setup.mode.rightOp': 'Le bon OP',
+  'setup.mode.rightOp.desc': 'Un anime, 4 extraits : retrouve son générique.',
+  'setup.rules.rightOp.1':
+    'On voit l’anime (titre, jaquette, OP ou ED) : retrouve son générique parmi 4 extraits de 4 s.',
+  'setup.rules.rightOp.2':
+    'Les 4 extraits passent à la suite, puis 15 s pour choisir, avec réécoute libre.',
+  'setup.rules.rightOp.3':
+    'Un seul essai : 200 points pendant l’écoute, puis de 200 à 50 pendant le décompte. 0 si c’est faux.',
+  'rightOp.question.OP': 'Lequel de ces 4 extraits est son opening ?',
+  'rightOp.question.ED': 'Lequel de ces 4 extraits est son ending ?',
+  'rightOp.question.IN': 'Lequel de ces 4 extraits est sa chanson ?',
+  'rightOp.listening': 'Écoute des extraits · {n} sur 4',
+  'rightOp.countdownAfter': 'Le décompte de 15 s démarre après D',
+  'rightOp.choose': 'Décompte : 15 s pour choisir, réécoute libre',
+  'rightOp.waitingOthers': 'En attente des autres joueurs',
+  'rightOp.clip': 'Extrait {l}',
+  'rightOp.replay': 'Réécouter',
+  'rightOp.replayClip': 'Réécouter l’extrait {l}',
+  'rightOp.pick': 'Choisir',
+  'rightOp.pickClip': 'Choisir l’extrait {l}',
+  'rightOp.status.playing': 'En écoute',
+  'rightOp.status.heard': 'Écouté',
+  'rightOp.status.next': 'À venir',
+  'rightOp.status.yours': 'Ton choix',
+  'rightOp.hint':
+    'Un seul essai. Choisir pendant l’écoute rapporte 200 points ; ensuite, les points baissent pendant les 15 s du décompte.',
+  'rightOp.good': 'Bien joué ! +{n}',
+  'rightOp.bad': 'Raté',
+  'rightOp.goodHint': 'La bonne réponse et les pièges arrivent à la révélation.',
+  'rightOp.badHint': 'Tu sauras lequel c’était à la révélation.',
+  'rightOp.replayAfter': 'Tu peux encore réécouter les extraits.',
+  'rightOp.timeUp': 'Temps écoulé',
+  'rightOp.answered': 'a répondu',
+  'rightOp.thinking': 'réfléchit…',
+  'rightOp.reveal.right': 'Bonne réponse',
+  'rightOp.reveal.trap': 'Piège',
+  'rightOp.reveal.yours': 'Ton choix · piège',
+  'rightOp.reveal.found': '+{n} · Bien joué',
+  'rightOp.reveal.missed': 'Raté · tu as choisi {l}',
+  'rightOp.reveal.none': 'Pas de réponse',
+  'rightOp.reveal.cards': 'Les 4 extraits',
 } as const;
 
 export type MessageKey = keyof typeof fr;

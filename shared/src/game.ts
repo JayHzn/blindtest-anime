@@ -8,6 +8,7 @@ import {
   type HigherLowerView,
 } from './higherLower';
 import { PLAYLIST, type PlaylistReveal } from './playlist';
+import type { RightOpReveal, RightOpView } from './rightOp';
 
 /**
  * Modes de jeu :
@@ -16,19 +17,26 @@ import { PLAYLIST, type PlaylistReveal } from './playlist';
  * - `playlist` : (multi) les joueurs choisissent les chansons, jouées avec les règles du Classique ;
  * - `auction` : (multi) chacun annonce la durée d'extrait qu'il lui faut, le plus audacieux répond ;
  * - `higherLower` : la nouvelle chanson vient-elle d'un anime plus ou moins populaire ? (élimination) ;
- * - `impostor` : (multi) 1 ou 2 imposteurs ont une autre chanson ; un mot chacun, puis on vote.
+ * - `impostor` : (multi) 1 ou 2 imposteurs ont une autre chanson ; un mot chacun, puis on vote ;
+ * - `rightOp` : « Le bon OP » : un anime, 4 extraits, retrouver son générique.
  */
 export type GameModeId =
-  'classic' | 'progressive' | 'playlist' | 'auction' | 'higherLower' | 'impostor';
+  'classic' | 'progressive' | 'playlist' | 'auction' | 'higherLower' | 'impostor' | 'rightOp';
 export const GAME_MODES: readonly GameModeId[] = [
   'classic',
   'progressive',
   'higherLower',
+  'rightOp',
   'playlist',
   'auction',
   'impostor',
 ];
-export const SOLO_MODES: readonly GameModeId[] = ['classic', 'progressive', 'higherLower'];
+export const SOLO_MODES: readonly GameModeId[] = [
+  'classic',
+  'progressive',
+  'higherLower',
+  'rightOp',
+];
 export const ROOM_MODES: readonly GameModeId[] = GAME_MODES;
 
 /** Joueurs connectés nécessaires pour lancer une partie dans ce mode. */
@@ -61,6 +69,9 @@ export const MODE_TIMINGS: Record<GameModeId, ModeTiming> = {
   },
   // Imposteur : `listenMs` = extrait de début de manche (la manche dure jusqu'à la victoire d'un camp).
   impostor: { countdownMs: 3000, listenMs: IMPOSTOR.listenMs, revealMs: 14_000 },
+  // Le bon OP : 4 extraits de 4 s, puis 15 s de décompte (RIGHT_OP_ROUND_MS, écrit en
+  // clair ici pour éviter une dépendance circulaire avec rightOp.ts).
+  rightOp: { countdownMs: 3000, listenMs: 31_000, revealMs: 10_000 },
 };
 
 /**
@@ -252,6 +263,8 @@ export interface GameSnapshot {
   higherLower: HigherLowerView | null;
   /** Mode Imposteur : manche en cours vue par le joueur. */
   impostor: ImpostorView | null;
+  /** Le bon OP : l'anime de la manche, qui a répondu, son choix. */
+  rightOp: RightOpView | null;
 }
 
 /** Manche en cours du mode Playlist, vue par un joueur (rien sur les choix des autres). */
@@ -364,6 +377,8 @@ export interface RoundReveal {
   higherLower?: HigherLowerReveal;
   /** Mode Imposteur : les deux chansons, les rôles, les mots et les points. */
   impostor?: ImpostorReveal;
+  /** Le bon OP : les 4 extraits retournés, le bon, et qui a choisi quoi. */
+  rightOp?: RightOpReveal;
 }
 
 export type AnswerResult =
