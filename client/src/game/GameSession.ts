@@ -1,5 +1,6 @@
 import {
   HIGHER_LOWER,
+  IMPOSTOR,
   INITIAL_PROGRESS,
   MODE_TIMINGS,
   PROGRESSIVE,
@@ -7,6 +8,8 @@ import {
   type AuctionView,
   type HigherLowerPick,
   type HigherLowerView,
+  type ImpostorView,
+  type ImpostorWordError,
   type GameEnd,
   type GamePhase,
   type GameSnapshot,
@@ -85,6 +88,8 @@ export interface SessionState {
   auction: AuctionView | null;
   /** Mode Plus ou moins : tour en cours (référence, écart, choix envoyé). */
   higherLower: HigherLowerView | null;
+  /** Mode Imposteur : manche en cours (sa chanson, mots, votes, éliminations). */
+  impostor: ImpostorView | null;
   /** Mode Plus ou moins : extrait en cours de lecture (index de la chanson, fin en heure serveur). */
   clip: { index: number; endsAt: number } | null;
   /** Le navigateur a bloqué le son (pas de clic depuis le chargement de la page). */
@@ -145,6 +150,7 @@ export class GameSession {
       playlist: NO_PLAYLIST,
       auction: null,
       higherLower: null,
+      impostor: null,
       clip: null,
       soundBlocked: false,
       end: null,
@@ -168,6 +174,7 @@ export class GameSession {
         }),
       'game:players': (players) => this.update({ players }),
       'auction:state': ({ round, view }) => this.onAuctionState(round, view),
+      'impostor:state': ({ round, view }) => this.onImpostorState(round, view),
       'round:reveal': (reveal) => this.onReveal(reveal),
       'game:end': (end) => this.onEnd(end),
     };
@@ -228,6 +235,7 @@ export class GameSession {
 
   async submitAnswer(payload: AnswerPayload): Promise<void> {
     if (this.isAuction) return this.submitAuctionAnswer(payload);
+    if (this.isImpostor) return this.submitImpostorGuess(payload);
     if (this.state.phase !== 'listening' || !this.canAnswer()) return;
     const round = this.state.round;
     const wrongCount = this.state.answer.wrongCount;
@@ -312,6 +320,51 @@ export class GameSession {
     if (!ok && !this.disposed && this.state.round === round && this.state.higherLower) {
       this.update({ higherLower: { ...this.state.higherLower, yourPick: null } });
     }
+  }
+
+  /** Imposteur : le mot du joueur qui a la parole. Renvoie la raison d'un refus (null : accepté). */
+  async impostorWord(word: string): Promise<ImpostorWordError | 'connection' | null> {
+    const result = await socket
+      .timeout(5000)
+      .emitWithAck('impostor:word', { word })
+      .catch(() => null);
+    if (!result) return 'connection';
+    return result.ok ? null : result.reason;
+  }
+
+  /** Imposteur : vote (affiché tout de suite, annulé si le serveur refuse). */
+  async impostorVote(target: string): Promise<void> {
+    const { impostor, round } = this.state;
+    if (!impostor || (impostor.step !== 'voting' && impostor.step !== 'revote')) return;
+    this.update({ impostor: { ...impostor, yourVote: target } });
+    const ok = await socket
+      .timeout(5000)
+      .emitWithAck('impostor:vote', { target })
+      .catch(() => false);
+    if (!ok && !this.disposed && this.state.round === round && this.state.impostor) {
+      this.update({ impostor: { ...this.state.impostor, yourVote: impostor.yourVote } });
+    }
+  }
+
+  /** Imposteur : réécouter sa chanson (lui seul l'entend), à tout moment de la manche. */
+  replayOwnSong(): void {
+    if (this.isImpostor && this.state.impostor?.song) {
+      void this.playSnippet(IMPOSTOR.listenMs);
+    }
+  }
+
+  /** Imposteur : réécouter l'une des deux chansons à la révélation. */
+  playRevealSong(which: 'civil' | 'impostor'): void {
+    const reveal = this.state.reveal?.impostor;
+    if (!reveal) return;
+    const audio = which === 'civil' ? reveal.civilAudio : reveal.impostorAudio;
+    // Clé à part : l'audio de la manche en cours n'est pas libéré.
+    const key = 100_000 + this.state.round * 2 + (which === 'civil' ? 0 : 1);
+    const round = this.state.round;
+    void this.audio.prepare(key, audio.url, audio.startRatio).then((ok) => {
+      if (!ok || this.disposed || this.state.round !== round) return;
+      void this.audio.playSnippet(key, IMPOSTOR.listenMs, { keepFrom: round });
+    });
   }
 
   /** Plus ou moins : réécoute libre d'une chanson du tour (la référence ou la nouvelle). */
@@ -445,9 +498,11 @@ export class GameSession {
         ? { status: 'correct', wrongCount: 0, points: 0, seasonExact: false, sequenceExact: false }
         : { status: 'idle', wrongCount: 0 },
       auction: null,
+      impostor: null,
       higherLower: snapshot.higherLower,
     });
     if (snapshot.auction) this.onAuctionState(snapshot.round, snapshot.auction);
+    if (snapshot.impostor) this.onImpostorState(snapshot.round, snapshot.impostor);
     if (snapshot.phase === 'listening' && snapshot.listenStartedAt !== null) {
       this.pendingResume = { round: snapshot.round, startedAt: snapshot.listenStartedAt };
       this.video.preload(snapshot.round, snapshot.videoUrl);
@@ -472,6 +527,7 @@ export class GameSession {
       // Nouvelle manche : les coches « a trouvé » de la précédente disparaissent.
       players: this.state.players.map((player) => ({ ...player, found: false })),
       auction: null,
+      impostor: null,
       higherLower: null,
       clip: null,
     });
@@ -563,6 +619,65 @@ export class GameSession {
     );
   }
 
+  /**
+   * Imposteur : nouvel état de la manche. L'extrait de chacun (sa propre chanson)
+   * part à l'heure serveur fixée (`listenStartsAt`).
+   */
+  private onImpostorState(round: number, view: ImpostorView): void {
+    if (round !== this.state.round) return;
+    const previous = this.state.impostor;
+    this.update({ impostor: view, phase: 'listening', phaseEndsAt: view.stepEndsAt });
+    // Élimination : le rôle révélé sonne comme une bonne ou une mauvaise nouvelle.
+    if (previous && previous.eliminations.length < view.eliminations.length) {
+      if (view.eliminations.at(-1)?.impostor) sfx.correct();
+      else sfx.wrong();
+    }
+    if (view.step !== 'listening' || !view.song) return;
+    const key = `impostor:${round}`;
+    if (key === this.scheduledSnippet) return;
+    this.scheduledSnippet = key;
+    this.clearSnippetTimer();
+    const delay = view.listenStartsAt - serverNow();
+    const offsetMs = Math.max(0, -delay);
+    if (offsetMs >= IMPOSTOR.listenMs) return;
+    this.snippetTimer = window.setTimeout(
+      () => {
+        this.snippetTimer = null;
+        if (this.state.round === round) void this.playSnippet(IMPOSTOR.listenMs, offsetMs);
+      },
+      Math.max(0, delay),
+    );
+  }
+
+  /** Imposteur : un seul essai pour deviner la chanson de l'imposteur (civils gagnants). */
+  private async submitImpostorGuess(payload: AnswerPayload): Promise<void> {
+    const { round, answer } = this.state;
+    if (answer.status !== 'idle' && answer.status !== 'wrong') return;
+    this.update({ answer: { status: 'pending', wrongCount: answer.wrongCount } });
+    const result = await socket
+      .timeout(5000)
+      .emitWithAck('game:answer', payload)
+      .catch(() => null);
+    if (this.disposed || this.state.round !== round) return;
+    if (result?.accepted) {
+      if (result.correct) sfx.correct();
+      else sfx.wrong();
+      this.update({
+        answer: result.correct
+          ? {
+              status: 'correct',
+              wrongCount: answer.wrongCount,
+              points: result.points,
+              seasonExact: false,
+              sequenceExact: false,
+            }
+          : { status: 'eliminated', wrongCount: answer.wrongCount + 1 },
+      });
+    } else {
+      this.update({ answer: { status: 'idle', wrongCount: answer.wrongCount } });
+    }
+  }
+
   /** Enchères : seul celui qui a la main répond, une seule fois. */
   private async submitAuctionAnswer(payload: AnswerPayload): Promise<void> {
     const { auction, round, you } = this.state;
@@ -643,6 +758,10 @@ export class GameSession {
     return this.state.settings.mode === 'higherLower';
   }
 
+  private get isImpostor(): boolean {
+    return this.state.settings.mode === 'impostor';
+  }
+
   /**
    * Plus ou moins : programme les extraits du tour à partir de `startedAt` (heure
    * serveur) — A puis B au tour 1, sinon la nouvelle chanson. Un extrait déjà
@@ -702,12 +821,12 @@ export class GameSession {
     return this.playSnippet(PROGRESSIVE.tiersMs[this.state.progress.tier] ?? 0);
   }
 
-  /** Joue `duration` ms depuis le point de départ de l'extrait (Progressif, Enchères). */
-  private async playSnippet(duration: number): Promise<void> {
+  /** Joue `duration` ms depuis le point de départ de l'extrait (Progressif, Enchères, Imposteur). */
+  private async playSnippet(duration: number, offsetMs = 0): Promise<void> {
     const round = this.state.round;
     const snippet = ++this.snippetCount;
     this.update({ snippetPlaying: true });
-    await this.audio.playSnippet(round, duration);
+    await this.audio.playSnippet(round, duration, { offsetMs });
     // Un extrait relancé entre-temps reste « en cours ».
     if (!this.disposed && snippet === this.snippetCount && this.state.round === round) {
       this.update({ snippetPlaying: false });

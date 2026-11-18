@@ -109,6 +109,27 @@ export function registerSocketHandlers(socket: GameSocket, { games, rooms }: Man
     ack(isHigherLowerPick(pick) ? (games.gameOf(playerId)?.pick(playerId, pick) ?? false) : false);
   });
 
+  socket.on('impostor:word', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    const word = (payload as { word?: unknown } | null)?.word;
+    ack(
+      games.gameOf(playerId)?.impostorWord(playerId, word) ?? {
+        ok: false,
+        reason: 'not_your_turn',
+      },
+    );
+  });
+
+  socket.on('impostor:vote', (payload, ack) => {
+    if (typeof ack !== 'function') return;
+    const target = (payload as { target?: unknown } | null)?.target;
+    if (typeof target !== 'string' || target.length > 100) {
+      ack(false);
+      return;
+    }
+    ack(games.gameOf(playerId)?.impostorVote(playerId, target) ?? false);
+  });
+
   socket.on('audio:ready', (payload) => {
     const report = sanitizeAudioReport(payload);
     if (report) games.gameOf(playerId)?.audioReady(playerId, report.round, report.url);

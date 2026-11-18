@@ -21,6 +21,7 @@ import type {
   TierProgress,
 } from './game';
 import type { HigherLowerPick, HigherLowerView } from './higherLower';
+import type { ImpostorView, ImpostorWordError } from './impostor';
 import type { PlaylistPickResponse, PlaylistPreview, PlaylistSongsResponse } from './playlist';
 import type { RoomError, RoomResponse, RoomState } from './room';
 
@@ -64,6 +65,8 @@ export interface ServerToClientEvents {
   'playlist:guessWindow': (payload: { endsAt: number }) => void;
   /** Enchères : état de la manche (annonces, ordre de passage, extrait programmé…) à chaque changement. */
   'auction:state': (payload: { round: number; view: AuctionView }) => void;
+  /** Imposteur : état de la manche (mots, votes, éliminations…) à chaque changement. */
+  'impostor:state': (payload: { round: number; view: ImpostorView }) => void;
   /** Fin de la manche : réponse et résultats. */
   'round:reveal': (reveal: RoundReveal) => void;
   /** Fin de la partie. */
@@ -95,6 +98,13 @@ export interface ClientToServerEvents {
   'auction:replay': (ack: (left: number | null) => void) => void;
   /** Plus ou moins : choix définitif pour la nouvelle chanson (false : refusé). */
   'higherLower:pick': (payload: { pick: HigherLowerPick }, ack: (ok: boolean) => void) => void;
+  /** Imposteur : le mot du joueur qui a la parole (refusé : la raison). */
+  'impostor:word': (
+    payload: { word: string },
+    ack: (result: { ok: true } | { ok: false; reason: ImpostorWordError }) => void,
+  ) => void;
+  /** Imposteur : vote (modifiable jusqu'à la fin du vote). */
+  'impostor:vote': (payload: { target: string }, ack: (ok: boolean) => void) => void;
   /** Quitte la partie en cours (solo). */
   'game:leave': () => void;
   /** L'audio de la manche (`url` reçue dans `round:prepare`) est préchargé et prêt à jouer. */

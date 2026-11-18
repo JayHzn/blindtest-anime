@@ -1,5 +1,6 @@
 import { AUCTION, type AuctionResult, type AuctionTurn, type AuctionView } from './auction';
 import { THEME_TYPES, type PopularityTier, type ThemeFilters, type ThemeType } from './catalogue';
+import { IMPOSTOR, isVoteDuration, type ImpostorReveal, type ImpostorView } from './impostor';
 import {
   HIGHER_LOWER,
   type HigherLowerPick,
@@ -14,15 +15,18 @@ import { PLAYLIST, type PlaylistReveal } from './playlist';
  * - `progressive` : extraits de plus en plus longs (façon Songspot), points selon le palier ;
  * - `playlist` : (multi) les joueurs choisissent les chansons, jouées avec les règles du Classique ;
  * - `auction` : (multi) chacun annonce la durée d'extrait qu'il lui faut, le plus audacieux répond ;
- * - `higherLower` : la nouvelle chanson vient-elle d'un anime plus ou moins populaire ? (élimination).
+ * - `higherLower` : la nouvelle chanson vient-elle d'un anime plus ou moins populaire ? (élimination) ;
+ * - `impostor` : (multi) 1 ou 2 imposteurs ont une autre chanson ; un mot chacun, puis on vote.
  */
-export type GameModeId = 'classic' | 'progressive' | 'playlist' | 'auction' | 'higherLower';
+export type GameModeId =
+  'classic' | 'progressive' | 'playlist' | 'auction' | 'higherLower' | 'impostor';
 export const GAME_MODES: readonly GameModeId[] = [
   'classic',
   'progressive',
   'higherLower',
   'playlist',
   'auction',
+  'impostor',
 ];
 export const SOLO_MODES: readonly GameModeId[] = ['classic', 'progressive', 'higherLower'];
 export const ROOM_MODES: readonly GameModeId[] = GAME_MODES;
@@ -30,6 +34,7 @@ export const ROOM_MODES: readonly GameModeId[] = GAME_MODES;
 /** Joueurs connectés nécessaires pour lancer une partie dans ce mode. */
 export function minPlayers(mode: GameModeId): number {
   if (mode === 'playlist') return PLAYLIST.minPlayers;
+  if (mode === 'impostor') return IMPOSTOR.minPlayers;
   return mode === 'auction' ? AUCTION.minPlayers : 1;
 }
 
@@ -54,6 +59,8 @@ export const MODE_TIMINGS: Record<GameModeId, ModeTiming> = {
     listenMs: HIGHER_LOWER.snippetMs + HIGHER_LOWER.chooseMs,
     revealMs: 6000,
   },
+  // Imposteur : `listenMs` = extrait de début de manche (la manche dure jusqu'à la victoire d'un camp).
+  impostor: { countdownMs: 3000, listenMs: IMPOSTOR.listenMs, revealMs: 14_000 },
 };
 
 /**
@@ -114,6 +121,8 @@ export interface GameSettings {
   filters: ThemeFilters;
   /** Playlist : chansons choisies par chaque joueur (1 à 10). */
   songsPerPlayer?: number;
+  /** Imposteur : durée du vote (ms), au choix de l'hôte. */
+  voteMs?: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -179,6 +188,9 @@ export function sanitizeSettings(input: unknown): GameSettings | null {
   } else if (mode === 'playlist') {
     settings.songsPerPlayer = PLAYLIST.songsDefault;
   }
+  // Conservé hors Imposteur, comme `songsPerPlayer`.
+  if (isVoteDuration(raw.voteMs)) settings.voteMs = raw.voteMs;
+  else if (mode === 'impostor') settings.voteMs = IMPOSTOR.voteDefaultMs;
   return settings;
 }
 
@@ -238,6 +250,8 @@ export interface GameSnapshot {
   auction: AuctionView | null;
   /** Mode Plus ou moins : tour en cours vu par le joueur. */
   higherLower: HigherLowerView | null;
+  /** Mode Imposteur : manche en cours vue par le joueur. */
+  impostor: ImpostorView | null;
 }
 
 /** Manche en cours du mode Playlist, vue par un joueur (rien sur les choix des autres). */
@@ -315,6 +329,8 @@ export interface RoundReveal {
   auction?: AuctionTurn[];
   /** Mode Plus ou moins : les deux chansons, l'écart, les choix et les éliminations. */
   higherLower?: HigherLowerReveal;
+  /** Mode Imposteur : les deux chansons, les rôles, les mots et les points. */
+  impostor?: ImpostorReveal;
 }
 
 export type AnswerResult =

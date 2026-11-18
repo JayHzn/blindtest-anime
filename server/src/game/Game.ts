@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import {
   BONUS_POINTS,
   HIGHER_LOWER,
+  IMPOSTOR,
+  impostorCount,
+  titleWordsOf,
   MODE_TIMINGS,
   INITIAL_PROGRESS,
   PLAYLIST,
@@ -25,6 +28,7 @@ import {
   type HigherLowerPick,
   type HigherLowerReveal,
   type HigherLowerView,
+  type ImpostorSong,
   type LocalizedTitle,
   type ModeTiming,
   type PlayerRoundResult,
@@ -40,6 +44,7 @@ import { audioPath, videoPath, type MediaRegistry } from '../media/MediaRegistry
 import type { Catalogue } from '../catalogue/Catalogue';
 import type { ThemeRow } from '../catalogue/types';
 import { AuctionRound } from './AuctionRound';
+import { ImpostorRound } from './ImpostorRound';
 
 type Events = ServerToClientEvents;
 
@@ -103,6 +108,15 @@ interface RoundState {
   auction: AuctionRound | null;
   /** Plus ou moins : choix définitifs des joueurs encore en jeu. */
   picks: Map<string, HigherLowerPick>;
+  /** Imposteur : chanson de l'imposteur, son audio opaque et son point de départ. */
+  impostorTheme: ThemeRow | null;
+  impostorToken: string | null;
+  impostorStartRatio: number;
+  /** Imposteur : joueurs qui ont un rôle (tirés quand l'audio est envoyé), et les imposteurs. */
+  roleHolders: string[] | null;
+  impostors: string[];
+  /** Imposteur : indices, votes, éliminations (créé à la fin du compte à rebours). */
+  impostor: ImpostorRound | null;
 }
 
 export interface GameOptions {
@@ -118,6 +132,8 @@ export interface GameOptions {
    * nombre de manches ; les musiques suivantes servent de remplaçantes.
    */
   choosers?: string[][];
+  /** Imposteur : chanson de l'imposteur de chaque manche (aligné sur `themes`). */
+  impostorThemes?: ThemeRow[];
   random?: () => number;
   onFinished?: (game: Game) => void;
   /** Durée du compte à rebours de la première manche (écran d'intro en room). */
@@ -149,6 +165,8 @@ export class Game {
   private readonly pseudos = new Map<string, string>();
   private readonly rounds: RoundState[];
   private readonly spares: ThemeRow[];
+  /** Imposteur : chansons d'imposteur des musiques de rechange (alignées sur `spares`). */
+  private readonly impostorSpares: ThemeRow[];
   private phase: GamePhase = 'countdown';
   private roundIndex = 0;
   private phaseEndsAt = 0;
@@ -185,8 +203,11 @@ export class Game {
     const total = Math.min(wanted, options.themes.length);
     this.rounds = options.themes
       .slice(0, total)
-      .map((theme, index) => this.createRound(theme, options.choosers?.[index] ?? []));
+      .map((theme, index) =>
+        this.createRound(theme, options.choosers?.[index] ?? [], options.impostorThemes?.[index]),
+      );
     this.spares = options.themes.slice(total);
+    this.impostorSpares = options.impostorThemes?.slice(total) ?? [];
   }
 
   get totalRounds(): number {
@@ -273,6 +294,11 @@ export class Game {
       auction.playerLost(id);
       return;
     }
+    const impostor = this.rounds[this.roundIndex]?.impostor;
+    if (impostor) {
+      impostor.playerLost(id);
+      return;
+    }
     // Les joueurs restants n'attendent pas celui qui est parti.
     if (this.phase === 'listening' && this.everyoneDone()) this.onEveryoneDone();
     if (this.waitingForAudio && this.everyoneReady()) this.startListening();
@@ -314,6 +340,10 @@ export class Game {
           ? round.auction.view(forPlayer)
           : null,
       higherLower: this.isHigherLower && round ? this.higherLowerView(round, forPlayer) : null,
+      impostor:
+        round?.impostor && this.phase !== 'reveal' && this.phase !== 'finished'
+          ? round.impostor.view(forPlayer)
+          : null,
     };
   }
 
@@ -361,9 +391,9 @@ export class Game {
   audioReady(playerId: string, round: number, url: string): void {
     const player = this.players.get(playerId);
     const target = this.rounds[round];
-    if (!player || !target || url !== audioPath(target.token)) return;
+    if (!player || !target || url !== this.audioUrlFor(target, playerId)) return;
     player.ready.set(round, url);
-    if (this.isAuction) {
+    if (this.isAuction || this.isImpostor) {
       if (round === this.roundIndex) this.rounds[round]!.auction?.audioReady(playerId);
       return;
     }
@@ -393,7 +423,9 @@ export class Game {
   /** L'audio n'a pas pu être chargé : on remplace la musique tant que la manche n'a pas commencé. */
   audioFailed(playerId: string, round: number, url: string): void {
     const target = this.rounds[round];
-    if (!this.players.has(playerId) || !target || url !== audioPath(target.token)) return;
+    if (!this.players.has(playerId) || !target || url !== this.audioUrlFor(target, playerId)) {
+      return;
+    }
     // Plus ou moins : la chanson A (0) n'est jouée qu'au tour 1.
     const notStartedYet =
       round > this.roundIndex || (this.phase === 'countdown' && this.roundAudio().includes(round));
@@ -404,12 +436,13 @@ export class Game {
     }
 
     const replacement = this.spares.shift();
-    this.media.revoke(target.token);
+    const impostorReplacement = this.impostorSpares.shift();
+    this.revokeRound(target);
     if (!replacement) {
       this.handleNoReplacement(round);
       return;
     }
-    this.rounds[round] = this.createRound(replacement);
+    this.rounds[round] = this.createRound(replacement, [], impostorReplacement);
     for (const player of this.players.values()) player.ready.delete(round);
     this.emitPrepare(round);
   }
@@ -418,6 +451,12 @@ export class Game {
     const player = this.players.get(playerId);
     if (!player || !player.connected) return { accepted: false, reason: 'not_in_game' };
     const round = this.rounds[this.roundIndex]!;
+    // Imposteur : seuls les civils gagnants devinent la chanson de l'imposteur (un essai).
+    if (this.isImpostor) {
+      return (
+        round.impostor?.guess(playerId, payload) ?? { accepted: false, reason: 'not_listening' }
+      );
+    }
     // Plus ou moins : pas de réponse tapée, seulement un choix (voir `pick`).
     if (this.isHigherLower) return { accepted: false, reason: 'not_listening' };
     // Enchères : seul celui qui a la main répond, une fois (arbitrage dans AuctionRound).
@@ -557,6 +596,23 @@ export class Game {
     return true;
   }
 
+  /** Imposteur : le mot du joueur qui a la parole. */
+  impostorWord(playerId: string, word: unknown): ReturnType<ImpostorRound['word']> {
+    if (!this.players.get(playerId)?.connected) return { ok: false, reason: 'not_your_turn' };
+    return (
+      this.rounds[this.roundIndex]?.impostor?.word(playerId, word) ?? {
+        ok: false,
+        reason: 'not_your_turn',
+      }
+    );
+  }
+
+  /** Imposteur : vote d'un joueur encore en jeu. */
+  impostorVote(playerId: string, target: string): boolean {
+    if (!this.players.get(playerId)?.connected) return false;
+    return this.rounds[this.roundIndex]?.impostor?.vote(playerId, target) ?? false;
+  }
+
   /** Enchères : annonce secrète d'un joueur pendant la phase d'annonce. */
   bid(playerId: string, bid: number): boolean {
     const round = this.rounds[this.roundIndex];
@@ -633,6 +689,23 @@ export class Game {
     return this.settings.mode === 'higherLower';
   }
 
+  private get isImpostor(): boolean {
+    return this.settings.mode === 'impostor';
+  }
+
+  /** Imposteur : l'imposteur reçoit l'audio de sa chanson ; les autres celui des civils. */
+  private audioUrlFor(round: RoundState, playerId: string): string {
+    return audioPath(this.isImpostorOf(round, playerId) ? round.impostorToken! : round.token);
+  }
+
+  private startRatioFor(round: RoundState, playerId: string): number {
+    return this.isImpostorOf(round, playerId) ? round.impostorStartRatio : round.startRatio;
+  }
+
+  private isImpostorOf(round: RoundState, playerId: string): boolean {
+    return round.impostorToken !== null && round.impostors.includes(playerId);
+  }
+
   /** Temps d'écoute et de réponse de la manche en cours (Plus ou moins : 30 s au tour 1). */
   private get listenMs(): number {
     return this.isHigherLower ? higherLowerListenMs(this.roundIndex) : this.timing.listenMs;
@@ -646,7 +719,7 @@ export class Game {
   private isPlayerReady(player: PlayerState): boolean {
     return this.roundAudio().every((index) => {
       const round = this.rounds[index];
-      return round !== undefined && player.ready.get(index) === audioPath(round.token);
+      return round !== undefined && player.ready.get(index) === this.audioUrlFor(round, player.id);
     });
   }
 
@@ -698,6 +771,10 @@ export class Game {
   private afterCountdown(): void {
     if (this.isAuction) {
       this.startAuction();
+      return;
+    }
+    if (this.isImpostor) {
+      this.startImpostor();
       return;
     }
     if (this.everyoneReady()) {
@@ -779,6 +856,113 @@ export class Game {
     // Préchargement de la manche suivante pendant celle-ci.
     if (!this.preparedRounds.has(index + 1)) this.emitPrepare(index + 1);
     round.auction.start();
+  }
+
+  /**
+   * Imposteur : la manche commence par l'extrait commun (chacun le sien), puis les
+   * indices. Jouent les joueurs qui ont reçu un rôle et sont encore là ; les autres regardent.
+   */
+  private startImpostor(): void {
+    const index = this.roundIndex;
+    const round = this.rounds[index]!;
+    if (!round.roleHolders) this.drawRoles(round);
+    const participants = round.roleHolders!.filter((id) => this.players.has(id));
+    // L'imposteur est parti avant la manche : on en désigne un autre (il charge son audio).
+    if (!participants.some((id) => round.impostors.includes(id)) && participants.length > 0) {
+      const replacement = participants[Math.floor(this.random() * participants.length)]!;
+      round.impostors = [replacement];
+      this.emitter.toPlayer(replacement, 'round:prepare', {
+        round: index,
+        url: this.audioUrlFor(round, replacement),
+        startRatio: this.startRatioFor(round, replacement),
+      });
+    }
+    for (const id of participants) round.participants.add(id);
+    const impostorTheme = round.impostorTheme!;
+    const civilWords = this.titleWords(round.theme);
+    const impostorWords = this.titleWords(impostorTheme);
+    round.impostor = new ImpostorRound(
+      participants,
+      round.impostors.filter((id) => participants.includes(id)),
+      this.settings.voteMs ?? IMPOSTOR.voteDefaultMs,
+      {
+        isConnected: (id) => this.players.get(id)?.connected ?? false,
+        schedule: (delayMs, action) => this.schedule(delayMs, action),
+        setPhase: (phase, endsAt) => {
+          this.phase = phase;
+          this.phaseEndsAt = endsAt;
+        },
+        broadcastState: () => {
+          for (const id of this.players.keys()) {
+            this.emitter.toPlayer(id, 'impostor:state', {
+              round: index,
+              view: round.impostor!.view(id),
+            });
+          }
+        },
+        songOf: (id) =>
+          round.roleHolders!.includes(id)
+            ? this.impostorSong(round.impostors.includes(id) ? impostorTheme : round.theme)
+            : null,
+        titleWordsOf: (id) => (round.impostors.includes(id) ? impostorWords : civilWords),
+        isImpostorSong: (payload) => this.catalogue.validate(impostorTheme.id, payload).correct,
+        addScore: (id, delta) => {
+          const player = this.players.get(id);
+          if (player) player.score += delta;
+        },
+        endRound: () => this.endRound(),
+      },
+      this.random,
+    );
+    // Préchargement de la manche suivante pendant celle-ci.
+    if (!this.preparedRounds.has(index + 1)) this.emitPrepare(index + 1);
+    round.impostor.start();
+  }
+
+  /** Imposteur : rôles de la manche, tirés parmi les joueurs connectés. */
+  private drawRoles(round: RoundState): void {
+    const holders = this.connectedPlayers().map((player) => player.id);
+    const shuffled = [...holders];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(this.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    }
+    round.roleHolders = holders;
+    round.impostors = shuffled.slice(0, impostorCount(holders.length));
+  }
+
+  /** Mots du titre d'une chanson (tous les titres de l'anime et de sa série), refusés comme indices. */
+  private titleWords(theme: ThemeRow): Set<string> {
+    const anime = this.catalogue.getAnime(theme.animeId)!;
+    const franchise = this.catalogue.getFranchise(anime.franchiseId);
+    return titleWordsOf(
+      [
+        anime.name,
+        anime.titleRomaji,
+        anime.titleEn,
+        anime.titleFr,
+        franchise?.name,
+        franchise?.nameFr,
+      ].filter((title): title is string => Boolean(title)),
+    );
+  }
+
+  private impostorSong(theme: ThemeRow): ImpostorSong {
+    const anime = this.catalogue.getAnime(theme.animeId)!;
+    return {
+      title: {
+        fr: this.catalogue.animeTitle(anime, 'fr'),
+        en: this.catalogue.animeTitle(anime, 'en'),
+      },
+      romaji: anime.titleRomaji ?? anime.name,
+      year: anime.year,
+      coverUrl: anime.coverUrl,
+      coverColor: anime.coverColor,
+      type: theme.type,
+      sequence: theme.sequence,
+      song: theme.songTitle,
+      artists: theme.artists,
+    };
   }
 
   /** Proposition d'un joueur telle qu'on l'affiche aux autres (titre choisi, ou texte tapé). */
@@ -995,7 +1179,11 @@ export class Game {
 
   // ─── Utilitaires ──────────────────────────────────────────────────────────
 
-  private createRound(theme: ThemeRow, choosers: string[] = []): RoundState {
+  private createRound(
+    theme: ThemeRow,
+    choosers: string[] = [],
+    impostorTheme?: ThemeRow,
+  ): RoundState {
     return {
       theme,
       token: this.media.register(theme.audioUrl),
@@ -1011,23 +1199,42 @@ export class Game {
       guessWindowEndsAt: null,
       auction: null,
       picks: new Map(),
+      impostorTheme: impostorTheme ?? null,
+      impostorToken: impostorTheme ? this.media.register(impostorTheme.audioUrl) : null,
+      impostorStartRatio: Math.round(this.random() * START_RATIO_MAX * 1000) / 1000,
+      roleHolders: null,
+      impostors: [],
+      impostor: null,
     };
   }
 
   private revokeRound(round: RoundState): void {
     this.media.revoke(round.token);
     if (round.videoToken) this.media.revoke(round.videoToken);
+    if (round.impostorToken) this.media.revoke(round.impostorToken);
   }
 
   private emitPrepare(index: number): void {
     const round = this.rounds[index];
     if (!round) return;
+    this.preparedRounds.add(index);
+    if (this.isImpostor) {
+      // Les rôles sont tirés à l'envoi de l'audio : chacun reçoit celui de sa chanson.
+      if (!round.roleHolders) this.drawRoles(round);
+      for (const id of this.players.keys()) {
+        this.emitter.toPlayer(id, 'round:prepare', {
+          round: index,
+          url: this.audioUrlFor(round, id),
+          startRatio: this.startRatioFor(round, id),
+        });
+      }
+      return;
+    }
     const audio: RoundAudio = {
       round: index,
       url: audioPath(round.token),
       startRatio: round.startRatio,
     };
-    this.preparedRounds.add(index);
     this.broadcast('round:prepare', audio);
   }
 
@@ -1036,10 +1243,11 @@ export class Game {
     const { theme } = round;
     const anime = this.catalogue.getAnime(theme.animeId)!;
     const franchise = this.catalogue.getFranchise(anime.franchiseId)!;
-    const { auction } = round;
+    const { auction, impostor } = round;
     const results = [...this.players.values()].map(
       (player): PlayerRoundResult =>
         auction?.resultFor(player.id) ??
+        impostor?.resultFor(player.id) ??
         round.results.get(player.id) ?? {
           playerId: player.id,
           correct: false,
@@ -1081,6 +1289,22 @@ export class Game {
       results,
       players: this.scoreboard(),
       ...(auction && { auction: auction.turns() }),
+      ...(impostor &&
+        round.impostorTheme &&
+        round.impostorToken && {
+          impostor: {
+            winner: impostor.result ?? 'impostors',
+            civilSong: this.impostorSong(round.theme),
+            impostorSong: this.impostorSong(round.impostorTheme),
+            words: impostor.allWords(),
+            players: impostor.results(),
+            civilAudio: { url: audioPath(round.token), startRatio: round.startRatio },
+            impostorAudio: {
+              url: audioPath(round.impostorToken),
+              startRatio: round.impostorStartRatio,
+            },
+          },
+        }),
     };
   }
 
@@ -1094,8 +1318,8 @@ export class Game {
       if (index < from || !round) continue;
       this.emitter.toPlayer(id, 'round:prepare', {
         round: index,
-        url: audioPath(round.token),
-        startRatio: round.startRatio,
+        url: this.audioUrlFor(round, id),
+        startRatio: this.startRatioFor(round, id),
       });
     }
     if (this.phase === 'reveal' && this.lastReveal) {

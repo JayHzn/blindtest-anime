@@ -10,8 +10,9 @@ Le blindtest des openings et endings d'anime, à jouer seul ou entre potes.
 
 ### Réglages
 
-- **Mode** : Classique, Progressif ou Plus ou moins, et en room Playlist des joueurs ou Enchères (voir plus bas).
+- **Mode** : Classique, Progressif ou Plus ou moins, et en room Playlist des joueurs, Enchères ou Imposteur (voir plus bas).
 - **Manches** : 5, 10, 15 ou 20 (en Playlist des joueurs : nombre de chansons par joueur, de 1 à 10 ; pas de manches en Plus ou moins).
+- **Durée du vote** (Imposteur) : 15, 20, 30 ou 45 secondes.
 - **Popularité** : Top 100, Top 500, Top 2000 ou tout le catalogue (selon le nombre de fans sur AniList).
 - **Types** : openings, endings, ou les deux.
 - **Années** : toutes, avant 2000, 2000–2009, 2010–2019 ou 2020+.
@@ -90,6 +91,27 @@ Combien de temps te faut-il pour reconnaître la chanson ? Le plus audacieux ten
 - Pendant la réponse, la pénalité en jeu s'affiche en gros chez tout le monde : « −150 si tu te trompes ».
 - Si tout le monde se trompe, la réponse est révélée et chacun garde sa pénalité. Ton score peut devenir négatif.
 - Pas de bonus de précision dans ce mode : seul le nom de l'anime compte.
+
+### Imposteur (à partir de 4 joueurs)
+
+Comme Undercover, en musique : un ou deux joueurs n'ont pas la même chanson que les autres… et personne ne sait qui.
+
+1. **L'écoute** : chacun entend **sa** chanson (15 secondes) et voit son titre. Les civils ont tous la même ; l'imposteur en a une autre, proche (même type, même époque, popularité voisine). Tu ne sais pas si tu es civil ou imposteur. Tu peux réécouter ta chanson pendant toute la manche.
+2. **Les indices** : chacun à son tour donne **un seul mot** sur sa chanson, en 20 secondes. Interdits : un mot du titre de l'anime, ou un mot déjà donné.
+3. **Le vote** : tout le monde vote pour éliminer un joueur (durée choisie par l'hôte). Le plus voté est éliminé et son rôle est révélé. En cas d'égalité, on revote entre les ex æquo (qui ne votent pas) ; nouvelle égalité, personne n'est éliminé.
+4. On recommence (indices puis vote) jusqu'à la victoire d'un camp :
+   - **les civils gagnent** quand tous les imposteurs sont éliminés. Bonus : chaque civil encore en jeu a 15 secondes et un essai pour deviner la chanson de l'imposteur ;
+   - **les imposteurs gagnent** s'ils sont aussi nombreux que les civils encore en jeu.
+
+| Issue de la manche             | Points      |
+| ------------------------------ | ----------- |
+| Civils gagnants                | +100 chacun |
+| Chanson de l'imposteur devinée | +100        |
+| Imposteurs gagnants            | +300 chacun |
+
+- 1 imposteur jusqu'à 5 joueurs, 2 à partir de 6. Nouveaux rôles et nouvelle chanson à chaque manche.
+- Éliminé, tu suis la fin de la manche sans donner de mot ni voter (et tu gardes les points de ton camp).
+- À la fin de la manche : les deux chansons (que tu peux réécouter), le rôle, les mots et les points de chacun.
 
 ## Les réponses
 

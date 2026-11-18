@@ -242,6 +242,64 @@ export class Catalogue {
     return chain;
   }
 
+  /**
+   * Imposteur : `count` paires [chanson des civils, chanson de l'imposteur] proches
+   * (même type, années à 5 ans près, popularité à ×2,5 près, même genre si possible),
+   * jamais deux fois la même franchise dans la partie. À défaut de chanson proche, la
+   * plus proche en popularité, du même type.
+   */
+  impostorPairs(
+    filters: ThemeFilters,
+    count: number,
+    random: () => number = Math.random,
+  ): [ThemeRow, ThemeRow][] {
+    const filter = this.themeFilter(filters);
+    const candidates = this.themeList.filter(
+      (theme) => filter(theme) && this.anime.get(theme.animeId)!.popularity > 0,
+    );
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
+    }
+    const franchiseOf = (theme: ThemeRow) => this.anime.get(theme.animeId)!.franchiseId;
+    const used = new Set<number>();
+    const pairs: [ThemeRow, ThemeRow][] = [];
+
+    for (const civil of candidates) {
+      if (pairs.length >= count) break;
+      if (used.has(franchiseOf(civil))) continue;
+      const a = this.anime.get(civil.animeId)!;
+      const close: { theme: ThemeRow; score: number }[] = [];
+      let fallback: ThemeRow | undefined;
+      let fallbackRatio = Number.POSITIVE_INFINITY;
+      for (const other of candidates) {
+        const franchise = franchiseOf(other);
+        if (other.type !== civil.type || franchise === franchiseOf(civil) || used.has(franchise)) {
+          continue;
+        }
+        const b = this.anime.get(other.animeId)!;
+        const ratio = Math.max(a.popularity, b.popularity) / Math.min(a.popularity, b.popularity);
+        if (ratio < fallbackRatio) {
+          fallback = other;
+          fallbackRatio = ratio;
+        }
+        const yearGap = a.year !== null && b.year !== null ? Math.abs(a.year - b.year) : 99;
+        if (yearGap > 5 || ratio > 2.5) continue;
+        const sameGenre = a.genre !== null && a.genre === b.genre;
+        close.push({ theme: other, score: (sameGenre ? 0 : 10) + yearGap + (ratio - 1) * 3 });
+      }
+      close.sort((x, y) => x.score - y.score);
+      // Un peu de hasard parmi les plus proches, pour ne pas toujours tirer le même duo.
+      const best = close.slice(0, 5);
+      const partner = best.length > 0 ? best[Math.floor(random() * best.length)]!.theme : fallback;
+      if (!partner) continue;
+      used.add(franchiseOf(civil));
+      used.add(franchiseOf(partner));
+      pairs.push([civil, partner]);
+    }
+    return pairs;
+  }
+
   /** Valide la réponse d'un joueur pour une musique donnée. */
   validate(themeId: number, answer: AnswerPayload): AnswerVerdict {
     const wrong: AnswerVerdict = { correct: false, seasonExact: false, sequenceExact: false };

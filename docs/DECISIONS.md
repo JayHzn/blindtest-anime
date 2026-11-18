@@ -214,6 +214,34 @@ Validé le 2026-11-17 (maquette : https://claude.ai/artifact/XB4rhpAbMMXY5yeoM9R
   - le score d'un joueur compte ses bonnes réponses ; `eliminatedAt` (tour d'élimination, 0 pour un spectateur arrivé en cours de partie) sert au classement ;
   - un audio injouable (pas encore joué) est remplacé en retirant la suite de la chaîne à partir de lui, pour que chaque écart reste respecté.
 
+### Imposteur (v2, multi uniquement, style Undercover)
+
+Validé le 2026-11-18 (maquette : https://claude.ai/artifact/DHKrGNmaYzFKQJXyiMA3Uz), mis en œuvre le même jour.
+
+- **Principe** : à chaque manche, la majorité (les civils) a la chanson X, 1 ou 2 imposteurs une chanson Y proche. **Personne ne connaît son rôle** : l'imposteur découvre peu à peu que ses indices ne collent pas avec ceux des autres.
+- **Joueurs** : 4 minimum ; 1 imposteur de 4 à 5 joueurs, 2 à partir de 6. Rôles tirés au hasard à chaque manche.
+- **Chanson de l'imposteur** : même type (OP/ED), années à 5 ans près, popularité à ×2,5 près, même genre AniList si possible (à défaut : la plus proche en popularité, du même type). Jamais deux fois la même franchise dans une partie.
+- **Titre affiché** : chacun voit le titre de **sa** chanson (jaquette, anime, OP/ED, chanson, artiste) dès l'écoute et pendant toute la manche, pour pouvoir en parler même sans la connaître. L'imposteur voit le sien.
+- **Écoute** : extrait de 15 s (point de départ tiré entre 0 et 60 %), puis **réécoute libre** de sa propre chanson.
+- **Indices** : chacun à son tour (ordre tiré au hasard à chaque tour) tape **un seul mot**, en 20 s, visible par tous. Refusés : un mot du titre de l'anime ou de sa série (mots de 3 lettres et plus, accents et casse ignorés ; « naruto-kun » aussi), ou un mot déjà donné dans la manche. Pas de mot à temps (ou joueur déconnecté) : « … » et on passe.
+- **Vote** (durée choisie par l'hôte : 15 / 20 / 30 / 45 s, 30 par défaut) : on vote pour éliminer un joueur encore en jeu ; on peut changer d'avis ; fin anticipée quand tout le monde a voté. On voit qui a voté, jamais contre qui ; après le vote, seul le total par joueur s'affiche.
+  - Le plus voté est éliminé et **son rôle est révélé** (civil ou imposteur), pas sa chanson.
+  - Égalité : revote de 15 s entre les ex æquo, qui ne votent pas. Nouvelle égalité (ou aucun vote) : personne n'est éliminé, on repart pour un tour d'indices.
+- **Fin de manche** (élimination comme Undercover) :
+  - **les civils gagnent** quand tous les imposteurs sont éliminés ; chaque civil encore en jeu a alors 15 s et **un essai** pour deviner la chanson de l'imposteur (l'anime suffit, comme ailleurs) ;
+  - **les imposteurs gagnent** dès qu'ils sont aussi nombreux que les civils encore en jeu, ou après 6 tours d'indices (garde-fou contre les égalités à répétition).
+- **Barème** : civils gagnants +100 chacun (éliminés compris), +100 pour la chanson de l'imposteur devinée ; imposteurs gagnants +300 chacun.
+- **Éliminés** : ils suivent la manche en spectateurs (indices, votes, éliminations), sans donner de mot ni voter ; un joueur arrivé en cours de manche regarde et joue à la suivante.
+- **Réglages de l'hôte** : dans le salon existant, le mode et la ligne « Durée du vote » ; le nombre de manches reste le réglage existant.
+- **Révélation de fin de manche** (14 s) : verdict, les deux chansons (réécoutables), rôle, mots et points de chacun, classement à côté.
+- **Fin de partie** : classement aux points, nombre de fois imposteur (et manches gagnées), chansons devinées, meilleur imposteur, manches gagnées par camp.
+- Détails (mise en œuvre) :
+  - au lancement, les paires de chansons sont tirées pour toutes les manches (plus 5 de rechange) ;
+  - les rôles d'une manche sont tirés quand son audio est envoyé (préchargement) : chaque joueur reçoit l'audio opaque de **sa** chanson, si bien que rien ne permet de comparer avec les autres ; si l'imposteur quitte la partie avant sa manche, un autre joueur est désigné ;
+  - états serveur : ÉCOUTE → INDICES (joueur par joueur) → VOTE (→ REVOTE) → ÉLIMINATION (6 s) → tour suivant, ou DEVINETTE → RÉVÉLATION ; tout est arbitré par `ImpostorRound`, branché sur le moteur commun ;
+  - chaque joueur reçoit sa vue de la manche (`impostor:state`, et dans `game:state` à la reconnexion) : jamais le rôle des autres avant leur élimination, ni l'autre chanson avant la révélation ; les deux audios ne sont envoyés qu'à la révélation, pour la réécoute ;
+  - l'extrait du début de manche part à une heure commune fixée par le serveur (0,8 s d'avance).
+
 ### Feuille de route
 
 - Facile (QCM 4 choix)

@@ -61,12 +61,16 @@ export class GameManager {
       return { ok: false, error: 'invalid_settings' };
     }
     // Enchères : multi uniquement (la room vérifie avant avec une erreur explicite).
-    if (settings.mode === 'auction' && players.length < minPlayers(settings.mode)) {
+    if (
+      (settings.mode === 'auction' || settings.mode === 'impostor') &&
+      players.length < minPlayers(settings.mode)
+    ) {
       return { ok: false, error: 'invalid_settings' };
     }
 
     let themes: ThemeRow[];
     let choosers: string[][] | undefined;
+    let impostorThemes: ThemeRow[] | undefined;
     if (playlist) {
       const rounds = playlist.filter((round) => this.catalogue!.getTheme(round.themeId));
       themes = rounds.map((round) => this.catalogue!.getTheme(round.themeId)!);
@@ -74,6 +78,11 @@ export class GameManager {
       // Remplaçantes (audio injouable) : tirées avec les filtres de la room, hors séries déjà jouées.
       const used = new Set(themes.map((theme) => this.catalogue!.franchiseOfTheme(theme.id)!));
       themes.push(...this.catalogue.pickThemes(settings.filters, SPARE_THEMES, Math.random, used));
+    } else if (settings.mode === 'impostor') {
+      // Paires de chansons proches : celle des civils, celle de l'imposteur.
+      const pairs = this.catalogue.impostorPairs(settings.filters, settings.rounds + SPARE_THEMES);
+      themes = pairs.map(([civil]) => civil);
+      impostorThemes = pairs.map(([, impostor]) => impostor);
     } else if (settings.mode === 'higherLower') {
       // Chaîne complète tirée d'avance (la chanson 0 est la première référence).
       themes = this.catalogue.higherLowerChain(settings.filters, HIGHER_LOWER.maxTours + 1);
@@ -93,6 +102,7 @@ export class GameManager {
       emitter: this.emitter,
       themes,
       choosers,
+      impostorThemes,
       introMs,
       audioWaitMs,
       onFinished: (finished) => {

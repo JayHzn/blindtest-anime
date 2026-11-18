@@ -5,6 +5,12 @@ import { AnswerForm } from '../components/game/AnswerForm';
 import { AuctionStage } from '../components/game/AuctionStage';
 import { GameSidebar } from '../components/game/GameSidebar';
 import {
+  ImpostorReveal,
+  ImpostorSidebar,
+  ImpostorStage,
+  ImpostorStepPill,
+} from '../components/game/Impostor';
+import {
   HigherLowerReveal,
   HigherLowerSidebar,
   HigherLowerStage,
@@ -39,6 +45,7 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
   const { phase } = state;
   const auctionMode = state.settings.mode === 'auction';
   const higherLowerMode = state.settings.mode === 'higherLower';
+  const impostorMode = state.settings.mode === 'impostor';
 
   const quit = () => {
     if (window.confirm(t('game.quit.confirm'))) onQuit();
@@ -48,7 +55,16 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
     <div className={styles.page}>
       <AppHeader
         center={
-          higherLowerMode ? (
+          impostorMode ? (
+            // Imposteur : la manche et son étape (indices, vote…).
+            <>
+              <span className={styles.roundPill}>
+                {t('setup.mode.impostor')} ·{' '}
+                {t('game.round', { n: state.round + 1, total: state.totalRounds })}
+              </span>
+              <ImpostorStepPill state={state} />
+            </>
+          ) : higherLowerMode ? (
             // Plus ou moins : pas de nombre de manches fixe, mais une série.
             <>
               <span className={styles.roundPill}>
@@ -79,7 +95,11 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
       </AppHeader>
 
       <div className={styles.layout}>
-        <main className={[styles.stage, higherLowerMode ? styles.stageBare : ''].join(' ')}>
+        <main
+          className={[styles.stage, higherLowerMode || impostorMode ? styles.stageBare : ''].join(
+            ' ',
+          )}
+        >
           {state.soundBlocked ? (
             <button
               type="button"
@@ -99,13 +119,19 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
           {higherLowerMode && phase === 'listening' ? (
             <HigherLowerStage session={session} state={state} now={now} />
           ) : null}
-          {!auctionMode && !higherLowerMode && phase === 'listening' ? (
+          {impostorMode && phase === 'listening' ? (
+            <ImpostorStage session={session} state={state} now={now} />
+          ) : null}
+          {impostorMode && phase === 'reveal' && state.reveal ? (
+            <ImpostorReveal session={session} reveal={state.reveal} state={state} now={now} />
+          ) : null}
+          {!auctionMode && !higherLowerMode && !impostorMode && phase === 'listening' ? (
             <ListeningStage session={session} state={state} now={now} />
           ) : null}
           {higherLowerMode && phase === 'reveal' && state.reveal ? (
             <HigherLowerReveal reveal={state.reveal} you={state.you} now={now} />
           ) : null}
-          {!higherLowerMode && phase === 'reveal' && state.reveal ? (
+          {!higherLowerMode && !impostorMode && phase === 'reveal' && state.reveal ? (
             <RevealPanel
               key={state.reveal.round}
               reveal={state.reveal}
@@ -116,7 +142,9 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
           ) : null}
         </main>
 
-        {higherLowerMode ? (
+        {impostorMode ? (
+          <ImpostorSidebar state={state} />
+        ) : higherLowerMode ? (
           <HigherLowerSidebar state={state} now={now} />
         ) : (
           <GameSidebar

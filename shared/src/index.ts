@@ -3,6 +3,7 @@ export * from './auction';
 export * from './catalogue';
 export * from './game';
 export * from './higherLower';
+export * from './impostor';
 export * from './playlist';
 export * from './room';
 export * from './search';

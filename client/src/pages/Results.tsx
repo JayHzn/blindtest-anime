@@ -5,6 +5,7 @@ import type { SessionState } from '../game/GameSession';
 import { useI18n } from '../i18n/context';
 import { formatScore } from '../lib/score';
 import { HigherLowerResults } from './HigherLowerResults';
+import { ImpostorResults } from './ImpostorResults';
 import styles from './Results.module.css';
 
 export type ResultsActions =
@@ -29,6 +30,9 @@ export function Results({ state, actions }: ResultsProps) {
   const { t, lang } = useI18n();
   if (state.settings.mode === 'higherLower') {
     return <HigherLowerResults state={state} actions={actions} />;
+  }
+  if (state.settings.mode === 'impostor') {
+    return <ImpostorResults state={state} actions={actions} />;
   }
   const me = state.players.find((player) => player.id === state.you);
   const score = me?.score ?? 0;

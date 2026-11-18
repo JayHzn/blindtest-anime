@@ -1,4 +1,5 @@
 import {
+  IMPOSTOR,
   PLAYLIST,
   POPULARITY_TIERS,
   SOLO_MODES,
@@ -140,6 +141,23 @@ export function SettingsForm({
           />
         </section>
       )}
+
+      {settings.mode === 'impostor' ? (
+        <section className={styles.section}>
+          <h2 className={styles.label}>{t('setup.voteMs')}</h2>
+          <ChipGroup
+            label={t('setup.voteMs')}
+            options={IMPOSTOR.voteOptionsMs.map((value) => ({
+              value,
+              label: t('game.seconds', { s: value / 1000 }),
+              disabled: disabled && value !== (settings.voteMs ?? IMPOSTOR.voteDefaultMs),
+            }))}
+            selected={[settings.voteMs ?? IMPOSTOR.voteDefaultMs]}
+            onToggle={(voteMs) => !disabled && onChange({ ...settings, voteMs })}
+          />
+          <p className={styles.note}>{t('setup.impostor.note')}</p>
+        </section>
+      ) : null}
 
       {playlist ? <p className={styles.note}>{t('setup.playlist.filtersNote')}</p> : null}
 
