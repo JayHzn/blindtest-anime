@@ -36,6 +36,12 @@ export interface ServerToClientEvents {
   'game:state': (snapshot: GameSnapshot) => void;
   /** Audio d'une manche à précharger (envoyé à l'avance). */
   'round:prepare': (audio: RoundAudio) => void;
+  /**
+   * Lien direct de la vidéo de la manche, envoyé à un joueur qui ne peut plus répondre
+   * (il a trouvé, est éliminé, a abandonné, ou a choisi la chanson) : il la précharge
+   * pendant que les autres cherchent. Les autres la reçoivent avec la révélation.
+   */
+  'round:video': (payload: { round: number; url: string }) => void;
   /** Compte à rebours avant l'écoute. */
   'round:countdown': (payload: { round: number; phaseEndsAt: number }) => void;
   /**

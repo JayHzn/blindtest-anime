@@ -89,6 +89,11 @@ describe('Game — plusieurs joueurs', () => {
     // Bob voit qu'Alice a trouvé, sans la réponse.
     const found = t.received('bob', 'player:found').at(-1) as { playerId: string };
     expect(found.playerId).toBe('alice');
+    // Alice a trouvé : elle seule reçoit le lien de la vidéo, à précharger.
+    expect(t.received('alice', 'round:video')).toEqual([
+      { round: 0, url: 'https://v.animethemes.moe/S3-OP1.webm' },
+    ]);
+    expect(t.received('bob', 'round:video')).toEqual([]);
 
     vi.advanceTimersByTime(6000);
     expect(t.game.answer('bob', { text: 'snk' })).toMatchObject({ correct: true, points: 125 });
@@ -108,7 +113,8 @@ describe('Game — plusieurs joueurs', () => {
     expect(snapshot).toMatchObject({ phase: 'listening', round: 0 });
     // Arrivé en cours de manche : il jouera à partir de la suivante.
     expect(snapshot.listenStartedAt).toBeNull();
-    expect(snapshot.videoUrl).toMatch(/^\/api\/video\//);
+    // La vidéo n'arrive qu'avec la révélation (lien direct).
+    expect(snapshot.videoUrl).toBeNull();
     const rounds = (t.received('chloe', 'round:prepare') as RoundAudio[]).map((a) => a.round);
     expect(rounds).toEqual([0, 1]);
   });

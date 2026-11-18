@@ -1,0 +1,9 @@
+# Worker Cloudflare du miroir audio : sert les fichiers du bucket R2 `anilind-audio`.
+# Déploiement : `npx wrangler@3 deploy` depuis ce dossier (après `npx wrangler@3 login`).
+name = "anilind-audio"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "AUDIO"
+bucket_name = "anilind-audio"

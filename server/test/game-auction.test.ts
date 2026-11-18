@@ -86,8 +86,8 @@ describe('Game — mode Enchères', () => {
     expect(view.step).toBe('bidding');
     expect(view.biddingEndsAt - Date.now()).toBe(AUCTION.biddingMs);
     expect(view.participants).toEqual(PLAYERS);
-    // La vidéo opaque se précharge ; la manche suivante aussi.
-    expect(view.videoUrl).toMatch(/^\/api\/video\//);
+    // Pas de vidéo pendant l'annonce (lien direct à la révélation) ; la manche suivante se précharge.
+    expect(view.videoUrl).toBeNull();
     expect((t.received('bob', 'round:prepare') as RoundAudio[]).map((a) => a.round)).toEqual([
       0, 1,
     ]);

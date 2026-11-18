@@ -18,6 +18,12 @@ export const config = {
   cataloguePath:
     process.env.CATALOGUE_PATH ?? fileURLToPath(new URL('../data/catalogue.db', import.meta.url)),
   version: process.env.npm_package_version ?? '0.1.0',
+  /**
+   * Miroir audio (Cloudflare R2 + Worker) : adresse du Worker et clé secrète des noms
+   * de fichiers. Absents : tout l'audio passe par le proxy du serveur.
+   */
+  mirrorUrl: process.env.MIRROR_URL?.trim() || null,
+  mirrorSecret: process.env.MIRROR_SECRET?.trim() || null,
   isProduction: process.env.NODE_ENV === 'production',
 } as const;
 

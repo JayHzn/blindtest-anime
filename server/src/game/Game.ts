@@ -40,6 +40,7 @@ import {
   type ServerToClientEvents,
   type TierProgress,
 } from '@blindtest/shared';
+import type { AudioMirror } from '../media/AudioMirror';
 import { audioPath, videoPath, type MediaRegistry } from '../media/MediaRegistry';
 import type { Catalogue } from '../catalogue/Catalogue';
 import type { ThemeRow } from '../catalogue/types';
@@ -87,8 +88,10 @@ interface PlayerState {
 
 interface RoundState {
   theme: ThemeRow;
-  /** Jeton opaque de l'audio. */
+  /** Jeton opaque de l'audio (proxy du serveur). */
   token: string;
+  /** Adresse de l'audio : miroir R2 si la chanson y est copiée, sinon le proxy. */
+  audioUrl: string;
   /** Jeton opaque de la vidéo, créé au début de l'écoute. */
   videoToken: string | null;
   startRatio: number;
@@ -117,6 +120,7 @@ interface RoundState {
   /** Imposteur : chanson de l'imposteur, son audio opaque et son point de départ. */
   impostorTheme: ThemeRow | null;
   impostorToken: string | null;
+  impostorAudioUrl: string | null;
   impostorStartRatio: number;
   /** Imposteur : joueurs qui ont un rôle (tirés quand l'audio est envoyé), et les imposteurs. */
   roleHolders: string[] | null;
@@ -140,6 +144,8 @@ export interface GameOptions {
   choosers?: string[][];
   /** Imposteur : chanson de l'imposteur de chaque manche (aligné sur `themes`). */
   impostorThemes?: ThemeRow[];
+  /** Miroir audio (R2) : l'audio des chansons copiées n'y passe plus par le serveur. */
+  mirror?: AudioMirror | null;
   random?: () => number;
   onFinished?: (game: Game) => void;
   /** Durée du compte à rebours de la première manche (écran d'intro en room). */
@@ -162,6 +168,7 @@ export class Game {
   readonly timing: ModeTiming;
   private readonly catalogue: Catalogue;
   private readonly media: MediaRegistry;
+  private readonly mirror: AudioMirror | null;
   private readonly emitter: GameEmitter;
   private readonly random: () => number;
   private readonly onFinished?: (game: Game) => void;
@@ -198,6 +205,7 @@ export class Game {
     this.timing = MODE_TIMINGS[options.settings.mode];
     this.catalogue = options.catalogue;
     this.media = options.media;
+    this.mirror = options.mirror ?? null;
     this.emitter = options.emitter;
     this.random = options.random ?? Math.random;
     this.onFinished = options.onFinished;
@@ -441,6 +449,15 @@ export class Game {
     const notStartedYet =
       round > this.roundIndex || (this.phase === 'countdown' && this.roundAudio().includes(round));
     if (!notStartedYet) return;
+    // Fichier du miroir injoignable : même chanson, par le proxy du serveur.
+    if (this.mirror?.isMirrorUrl(url)) {
+      if (target.audioUrl === url) target.audioUrl = audioPath(target.token);
+      if (target.impostorAudioUrl === url)
+        target.impostorAudioUrl = audioPath(target.impostorToken!);
+      for (const player of this.players.values()) player.ready.delete(round);
+      this.emitPrepare(round);
+      return;
+    }
     if (this.isHigherLower) {
       this.replaceHigherLowerSong(round);
       return;
@@ -497,6 +514,7 @@ export class Game {
 
     if (!verdict.correct) {
       if (progress) this.registerMistake(progress);
+      if (progress?.eliminated) this.sendVideo(round, playerId);
       // Éliminé au dernier palier : la manche peut se terminer si tout le monde a fini.
       if (progress?.eliminated && this.everyoneDone()) this.onEveryoneDone();
       return {
@@ -529,6 +547,7 @@ export class Game {
     });
 
     this.announceFound(round, playerId);
+    this.sendVideo(round, playerId);
     // Tout le monde a fini : révélation tout de suite (après l'accusé de réception).
     if (this.everyoneDone()) this.onEveryoneDone();
 
@@ -567,6 +586,7 @@ export class Game {
     if (progress.tier < PROGRESSIVE_LAST_TIER) return { ...progress };
     progress.eliminated = true;
     progress.attemptsLeft = 0;
+    this.sendVideo(round, playerId);
     if (this.everyoneDone()) this.onEveryoneDone();
     return { ...progress };
   }
@@ -706,7 +726,7 @@ export class Game {
 
   /** Imposteur : l'imposteur reçoit l'audio de sa chanson ; les autres celui des civils. */
   private audioUrlFor(round: RoundState, playerId: string): string {
-    return audioPath(this.isImpostorOf(round, playerId) ? round.impostorToken! : round.token);
+    return this.isImpostorOf(round, playerId) ? round.impostorAudioUrl! : round.audioUrl;
   }
 
   private startRatioFor(round: RoundState, playerId: string): number {
@@ -805,11 +825,8 @@ export class Game {
     this.phase = 'listening';
     round.listenStartedAt = startsAt;
     this.phaseEndsAt = startsAt + this.listenMs;
-    // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque
-    // (Plus ou moins : révélation sans vidéo, avec les jaquettes).
-    if (round.theme.videoUrl && !round.videoToken && !this.isHigherLower) {
-      round.videoToken = this.media.register(round.theme.videoUrl, 'video');
-    }
+    // La vidéo n'est plus préchargée pendant l'écoute : son lien direct arrive avec la
+    // révélation (voir `RoundReveal.video`).
     // Les joueurs dont le son est prêt démarrent ensemble ; les autres dès qu'il le sera.
     for (const player of this.connectedPlayers()) {
       // Plus ou moins : les éliminés écoutent sans répondre.
@@ -830,9 +847,6 @@ export class Game {
     const index = this.roundIndex;
     const round = this.rounds[index]!;
     const anime = this.catalogue.getAnime(round.theme.animeId);
-    if (round.theme.videoUrl && !round.videoToken) {
-      round.videoToken = this.media.register(round.theme.videoUrl, 'video');
-    }
     for (const player of this.connectedPlayers()) round.participants.add(player.id);
     round.auction = new AuctionRound(
       [...round.participants],
@@ -840,7 +854,7 @@ export class Game {
       round.videoToken ? videoPath(round.videoToken) : null,
       {
         isConnected: (id) => this.players.get(id)?.connected ?? false,
-        isAudioReady: (id) => this.players.get(id)?.ready.get(index) === audioPath(round.token),
+        isAudioReady: (id) => this.players.get(id)?.ready.get(index) === round.audioUrl,
         schedule: (delayMs, action) => this.schedule(delayMs, action),
         setPhase: (phase, endsAt) => {
           this.phase = phase;
@@ -1011,6 +1025,20 @@ export class Game {
       videoUrl: round.videoToken ? videoPath(round.videoToken) : null,
       ...(this.isPlaylist && { ownSong: round.choosers.includes(playerId) }),
       ...(this.isHigherLower && { higherLower: this.higherLowerView(round, playerId) }),
+    });
+    // Playlist : qui a choisi la chanson la connaît déjà.
+    if (this.isPlaylist && round.choosers.includes(playerId)) this.sendVideo(round, playerId);
+  }
+
+  /**
+   * Lien direct de la vidéo pour un joueur qui ne peut plus répondre : il la précharge
+   * (sans passer par notre serveur) et la révélation démarre sans attendre.
+   */
+  private sendVideo(round: RoundState, playerId: string): void {
+    if (!round.theme.videoUrl || this.isHigherLower || this.isImpostor) return;
+    this.emitter.toPlayer(playerId, 'round:video', {
+      round: this.roundIndex,
+      url: round.theme.videoUrl,
     });
   }
 
@@ -1196,9 +1224,12 @@ export class Game {
     choosers: string[] = [],
     impostorTheme?: ThemeRow,
   ): RoundState {
+    const token = this.media.register(theme.audioUrl);
+    const impostorToken = impostorTheme ? this.media.register(impostorTheme.audioUrl) : null;
     return {
       theme,
-      token: this.media.register(theme.audioUrl),
+      token,
+      audioUrl: this.mirror?.urlFor(theme.id) ?? audioPath(token),
       startRatio: Math.round(this.random() * START_RATIO_MAX * 1000) / 1000,
       videoToken: null,
       listenStartedAt: null,
@@ -1212,7 +1243,10 @@ export class Game {
       auction: null,
       picks: new Map(),
       impostorTheme: impostorTheme ?? null,
-      impostorToken: impostorTheme ? this.media.register(impostorTheme.audioUrl) : null,
+      impostorToken,
+      impostorAudioUrl: impostorTheme
+        ? (this.mirror?.urlFor(impostorTheme.id) ?? audioPath(impostorToken!))
+        : null,
       impostorStartRatio: Math.round(this.random() * START_RATIO_MAX * 1000) / 1000,
       roleHolders: null,
       impostors: [],
@@ -1244,7 +1278,7 @@ export class Game {
     }
     const audio: RoundAudio = {
       round: index,
-      url: audioPath(round.token),
+      url: round.audioUrl,
       startRatio: round.startRatio,
     };
     this.broadcast('round:prepare', audio);
@@ -1273,6 +1307,8 @@ export class Game {
     return {
       round: this.roundIndex,
       phaseEndsAt: this.phaseEndsAt,
+      // Plus ou moins et Imposteur : révélation avec les jaquettes, sans vidéo.
+      video: this.isHigherLower || this.isImpostor ? null : theme.videoUrl,
       anime: {
         id: anime.id,
         title: {
@@ -1310,9 +1346,9 @@ export class Game {
             impostorSong: this.impostorSong(round.impostorTheme),
             words: impostor.allWords(),
             players: impostor.results(),
-            civilAudio: { url: audioPath(round.token), startRatio: round.startRatio },
+            civilAudio: { url: round.audioUrl, startRatio: round.startRatio },
             impostorAudio: {
-              url: audioPath(round.impostorToken),
+              url: round.impostorAudioUrl!,
               startRatio: round.impostorStartRatio,
             },
           },

@@ -69,10 +69,8 @@ describe('Game — mode Classique', () => {
     t.ready(0);
     vi.advanceTimersByTime(countdownMs);
     expect(t.all('round:start')).toHaveLength(1);
-    // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque.
-    const { videoUrl } = t.last<{ videoUrl: string }>('round:start');
-    expect(videoUrl).toMatch(/^\/api\/video\/[\w-]+$/);
-    expect(t.media.resolve(videoUrl.split('/').pop()!, 'video')).toContain('S3-OP1');
+    // Rien sur la vidéo pendant l'écoute : son lien (direct) n'arrive qu'à la révélation.
+    expect(t.last<{ videoUrl: string | null }>('round:start').videoUrl).toBeNull();
     // L'audio de la manche suivante est envoyé pendant l'écoute.
     expect(t.prepared(1)).toBeDefined();
 
@@ -96,6 +94,8 @@ describe('Game — mode Classique', () => {
       coverColor: '#e4a15d',
     });
     expect(reveal.theme).toMatchObject({ type: 'OP', sequence: 1 });
+    // Vidéo chargée par le navigateur directement chez AnimeThemes, à la révélation.
+    expect(reveal.video).toBe('https://v.animethemes.moe/S3-OP1.webm');
     expect(reveal.results[0]).toMatchObject({ playerId: 'p1', correct: true, points: 220 });
     expect(reveal.players[0]?.score).toBe(220);
   });

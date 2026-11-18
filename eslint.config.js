@@ -22,6 +22,11 @@ export default tseslint.config(
     },
   },
   {
+    // Worker Cloudflare du miroir audio (environnement de type navigateur).
+    files: ['mirror-worker/**/*.js'],
+    languageOptions: { globals: globals.serviceworker },
+  },
+  {
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },

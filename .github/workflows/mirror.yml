@@ -1,0 +1,47 @@
+# Copie de l'audio du catalogue sur le miroir Cloudflare R2 (voir server/scripts/mirror.ts).
+# Lancement manuel (onglet Actions → « Miroir audio » → Run workflow), et chaque lundi
+# pour les nouvelles chansons. Une seule copie à la fois (index.json).
+name: Miroir audio
+
+on:
+  workflow_dispatch:
+    inputs:
+      top:
+        description: 'Chansons à copier (popularité)'
+        type: choice
+        options: ['500', '2000', 'all']
+        default: '2000'
+  schedule:
+    - cron: '0 4 * * 1'
+
+concurrency:
+  group: audio-mirror
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Dépendances
+        run: npm ci
+      - name: ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Catalogue (AnimeThemes, AniList, Wikidata)
+        run: npm run catalogue:sync -w server
+      - name: Copie sur R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: anilind-audio
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          MIRROR_SECRET: ${{ secrets.MIRROR_SECRET }}
+        run: npm run mirror:sync -w server -- --top ${{ inputs.top || '2000' }} --parallel 4

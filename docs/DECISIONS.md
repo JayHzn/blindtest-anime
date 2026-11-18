@@ -28,11 +28,12 @@ Validé le 2026-11-17.
   - un build qui échoue (ex. API AnimeThemes indisponible) n'écrase jamais le catalogue existant.
 - **Audio** :
   - **Développement local (étapes 1 à 5)** : proxy audio opaque (`/api/audio/:token`) vers le CDN AnimeThemes, pour ne pas révéler le nom du fichier.
-  - **Déploiement (étape 6)** : miroir audio sur Cloudflare R2.
-    - Script au build : téléchargement du catalogue joué (top 2000 minimum), réencodage en Opus 96 kbps, noms de fichiers aléatoires.
-    - Le navigateur lit les fichiers via un Cloudflare Worker branché sur R2, sans passer par notre serveur. L'adresse publique `*.r2.dev` est limitée en débit et réservée au dev, donc on ne l'utilise pas.
-    - Raisons : ne plus dépendre d'AnimeThemes (panne ou fermeture), fichiers environ 3 fois plus légers, coût nul dans l'offre gratuite.
-    - Téléchargement en douceur, sans surcharger AnimeThemes.
+  - **Miroir audio sur Cloudflare R2** (mis en place le 2026-11-18) : le navigateur lit l'audio des chansons copiées sur R2, via un Worker (`mirror-worker/`, https://anilind-audio.anilind.workers.dev), sans passer par notre serveur — la bande passante sortante de Render gratuit est limitée (quelques Go par mois).
+    - Fichiers nommés `a/<empreinte>.ogg`, empreinte = HMAC-SHA256(`MIRROR_SECRET`, n° de la chanson) : sans la clé (connue du serveur et du script d'envoi seulement), le nom ne dit rien de la chanson. `index.json` liste les numéros des chansons copiées ; le serveur le relit au démarrage puis toutes les 6 h.
+    - Le Worker ne sert que ces deux sortes de fichiers, gère les requêtes par plage (indispensables pour se placer dans le morceau) et met les fichiers en cache permanent. Offre gratuite : 10 Go stockés, sortie gratuite, 100 000 requêtes par jour.
+    - Réencodage en Opus 96 kbit/s (environ 1,1 Mo par chanson). Top 2000 = 6 159 chansons, environ 7 Go : tient dans les 10 Go gratuits, pas le catalogue entier (13 855).
+    - Script `npm run mirror:sync -w server -- --top 500|2000|all [--max N]` : télécharge depuis AnimeThemes une chanson à la fois (pause de 0,4 s), réencode (ffmpeg), envoie, met `index.json` à jour toutes les 20 chansons ; reprend là où il s'est arrêté. Accès dans `server/.env.r2` (jamais commité) ; `MIRROR_URL` et `MIRROR_SECRET` dans les variables d'environnement de Render.
+    - Chanson pas encore copiée, ou fichier du miroir qui ne se charge pas : l'audio passe par le proxy du serveur, comme avant.
     - Réhébergement acceptable pour un usage entre potes, à revoir si le site devient public.
   - Volume déjà normalisé par AnimeThemes (−16 LUFS, vérifié sur 14 fichiers) : aucune normalisation à faire.
   - **Chargement côté client** :
@@ -47,7 +48,7 @@ Validé le 2026-11-17.
     - le client ne charge que les morceaux couvrant l'extrait (environ 200 Ko au lieu d'environ 1 Mo), puis les recolle avant de jouer ;
     - à vérifier : aucun clic ni blanc audible aux jonctions. En cas d'échec : chanson entière (environ 1 Mo).
   - Si le préchargement échoue, le client prévient le serveur, qui tire une autre chanson avant le début de la manche. Si toutes les sources sont indisponibles : message « Musiques indisponibles, réessaie plus tard ».
-- **Vidéo de révélation** : affichée seulement à la révélation, mais **préchargée pendant l'écoute** via le proxy, derrière une URL opaque (`/api/video/:token`, envoyée avec `round:start`). Pas de miroir (trop volumineux). Tant qu'elle charge, ou si elle échoue : **jaquette AniList** (fond flouté à sa couleur dominante), l'extrait continue. Jaquette disponible pour 4 894 animes sur 4 900, envoyée seulement à la révélation.
+- **Vidéo de révélation** (revu le 2026-11-18) : chargée par le navigateur **directement chez AnimeThemes**, sans passer par notre serveur — la bande passante sortante de Render gratuit est limitée (quelques Go par mois, à confirmer sur la page de facturation), et la vidéo en représentait environ 80 % (10 à 40 Mo par manche et par joueur). Le lien direct (qui contient le nom de l'anime) n'est envoyé qu'à un joueur qui ne peut plus répondre : avec la révélation pour tout le monde, et plus tôt (`round:video`) à celui qui a trouvé, est éliminé, a abandonné ou a choisi la chanson (Playlist), qui la précharge pendant que les autres cherchent. Mesuré : environ 3 à 5 s de chargement quand elle part à la révélation ; d'ici là, **jaquette AniList** (fond flouté à sa couleur dominante) et l'extrait continue. 2 nouvelles tentatives si le CDN refuse (il limite les requêtes rapprochées). Plus ou moins et Imposteur : jaquettes seulement. Jaquette disponible pour 4 894 animes sur 4 900.
   - Constaté le 2026-11-17 : le CDN vidéo AnimeThemes (`v.animethemes.moe`) limite très fortement les requêtes (503 HTML au-delà d'environ une toutes les 2-3 s ; Chrome bloque alors la vidéo avec `ERR_BLOCKED_BY_ORB`). Le CDN audio n'a pas cette limite. Le proxy réessaie donc les 503 vidéo (8 essais espacés de 1,5 s), et le navigateur ne fait que quelques requêtes grâce au préchargement.
   - La vidéo est préchargée à la position que l'extrait aura en fin d'écoute ; à la révélation elle reprend à la position exacte de l'extrait (ou 1,5 s plus loin le temps de charger), pour que la musique continue sans coupure. Mesuré : vidéo jouée entre 0 et 1 s après la révélation, 5 fois sur 5.
   - Version choisie : sans scènes d'épisode, sans crédits, puis la plus légère (720p : 45 %, 1080p : 35 %, 480p : 9 % du catalogue ; 10 à 40 Mo par vidéo).
@@ -108,7 +109,7 @@ Validé le 2026-11-17.
   - après le compte à rebours, le serveur attend que chaque joueur signale son audio prêt, 10 s au maximum, puis démarre quand même ;
   - quand tous les joueurs connectés ont trouvé, la révélation arrive tout de suite ;
   - 5 musiques de rechange tirées en plus ; un audio qui ne charge pas est remplacé tant que la manche n'a pas commencé ;
-  - la vidéo n'est jamais envoyée en clair (son URL contient le nom de l'anime) : voir « Vidéo de révélation ».
+  - le lien de la vidéo (qui contient le nom de l'anime) n'est envoyé qu'aux joueurs qui ne peuvent plus répondre : voir « Vidéo de révélation ».
 
 ### Progressif (v1, façon Songspot)
 

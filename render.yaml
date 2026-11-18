@@ -24,6 +24,13 @@ services:
         value: production
       - key: CLIENT_ORIGIN
         value: https://anilind.onrender.com
+      # Miroir audio (Cloudflare R2 + Worker, dossier mirror-worker/) : l'audio des
+      # chansons copiées ne passe plus par ce serveur.
+      - key: MIRROR_URL
+        value: https://anilind-audio.anilind.workers.dev
+      # Clé des noms de fichiers du miroir (secrète) : à saisir dans le tableau de bord.
+      - key: MIRROR_SECRET
+        sync: false
 
   - type: web
     name: anilind

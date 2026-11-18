@@ -6,6 +6,7 @@ import type { Catalogue } from './catalogue/Catalogue';
 import type { Config } from './config';
 import { GameManager } from './game/GameManager';
 import { playerEmitter, registerSocketHandlers, type SocketData } from './game/socketHandlers';
+import { AudioMirror } from './media/AudioMirror';
 import { MediaRegistry } from './media/MediaRegistry';
 import { playerChannel, playerIdFromKey } from './players';
 import { RoomManager } from './rooms/RoomManager';
@@ -26,6 +27,8 @@ export interface AppOptions {
   logger?: boolean;
   /** Catalogue chargé, ou `null` si la base n'a pas encore été générée. */
   catalogue?: Catalogue | null;
+  /** Miroir audio (tests) ; absent : d'après la configuration. */
+  mirror?: AudioMirror | null;
 }
 
 /** Fréquence de nettoyage des rooms vides. */
@@ -48,6 +51,16 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
   }));
 
   const media = new MediaRegistry();
+  // Miroir audio : chargement de la liste des chansons copiées, puis relecture régulière.
+  const mirror =
+    options.mirror !== undefined
+      ? options.mirror
+      : config.mirrorUrl && config.mirrorSecret
+        ? new AudioMirror(config.mirrorUrl, config.mirrorSecret)
+        : null;
+  if (mirror && options.mirror === undefined) {
+    mirror.start((count) => fastify.log.info(`Miroir audio : ${count} chansons copiées`));
+  }
   registerCatalogueRoutes(fastify, catalogue);
   registerMediaRoutes(fastify, media);
 
@@ -55,7 +68,7 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
     cors: { origin: [...config.clientOrigins] },
   });
   const emitter = playerEmitter(io);
-  const games = new GameManager(catalogue, media, emitter);
+  const games = new GameManager(catalogue, media, emitter, mirror);
   const rooms = new RoomManager(games, emitter, Math.random, { catalogue, media });
   const sweeper = setInterval(() => rooms.sweep(), ROOM_SWEEP_INTERVAL_MS);
   sweeper.unref();
@@ -78,6 +91,7 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
 
   fastify.addHook('onClose', async () => {
     clearInterval(sweeper);
+    mirror?.stop();
     rooms.closeAll();
     games.closeAll();
     await io.close();

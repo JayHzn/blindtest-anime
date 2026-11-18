@@ -9,6 +9,7 @@ import {
 } from '@blindtest/shared';
 import type { Catalogue } from '../catalogue/Catalogue';
 import type { ThemeRow } from '../catalogue/types';
+import type { AudioMirror } from '../media/AudioMirror';
 import type { MediaRegistry } from '../media/MediaRegistry';
 import { Game, LISTEN_LEAD_MS, type GameEmitter } from './Game';
 
@@ -41,6 +42,7 @@ export class GameManager {
     private readonly catalogue: Catalogue | null,
     private readonly media: MediaRegistry,
     private readonly emitter: GameEmitter,
+    private readonly mirror: AudioMirror | null = null,
   ) {}
 
   /** Crée une partie (pas encore démarrée : appeler `game.start()`). */
@@ -103,6 +105,7 @@ export class GameManager {
       themes,
       choosers,
       impostorThemes,
+      mirror: this.mirror,
       introMs,
       audioWaitMs,
       listenLeadMs: LISTEN_LEAD_MS,

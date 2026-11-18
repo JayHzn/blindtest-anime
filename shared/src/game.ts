@@ -304,6 +304,12 @@ export interface LocalizedTitle {
 export interface RoundReveal {
   round: number;
   phaseEndsAt: number;
+  /**
+   * Vidéo de la chanson, lien direct AnimeThemes : chargée par le navigateur à la
+   * révélation seulement (la réponse est donnée, le nom du fichier ne trahit plus rien),
+   * sans passer par notre serveur, dont la bande passante est limitée.
+   */
+  video: string | null;
   anime: {
     id: number;
     title: LocalizedTitle;

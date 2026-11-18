@@ -160,6 +160,7 @@ export class GameSession {
     this.handlers = {
       'game:state': (snapshot) => this.onSnapshot(snapshot),
       'round:prepare': (audio) => this.onPrepare(audio),
+      'round:video': ({ round, url }) => this.onVideo(round, url),
       'round:countdown': ({ round, phaseEndsAt }) => this.onCountdown(round, phaseEndsAt),
       'round:start': ({ round, startedAt, phaseEndsAt, videoUrl, ownSong, higherLower }) => {
         if (higherLower) this.update({ higherLower });
@@ -726,7 +727,27 @@ export class GameSession {
     }
   }
 
+  /**
+   * Le joueur ne peut plus répondre : la vidéo se précharge à l'endroit où l'extrait
+   * sera à la révélation (fin de l'écoute en Classique, extrait en cours sinon).
+   */
+  private onVideo(round: number, url: string): void {
+    if (round !== this.state.round || this.video.get(round) !== null) return;
+    const startTime = this.audio.startTime(round) ?? 0;
+    const position =
+      this.isProgressive || !this.listenStart
+        ? (this.audio.position(round) ?? startTime)
+        : startTime + MODE_TIMINGS[this.state.settings.mode].listenMs / 1000 - 1;
+    this.video.preload(round, url, position);
+  }
+
   private onReveal(reveal: RoundReveal): void {
+    // La vidéo se charge maintenant, à l'endroit où l'extrait en est (un peu plus loin :
+    // le temps de charger) ; la jaquette s'affiche et l'extrait continue d'ici là.
+    if (reveal.video && this.video.get(reveal.round) === null) {
+      const position = this.audio.position(reveal.round);
+      this.video.preload(reveal.round, reveal.video, position ?? 0);
+    }
     this.update({
       phase: 'reveal',
       round: reveal.round,

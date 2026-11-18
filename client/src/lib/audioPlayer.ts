@@ -90,7 +90,8 @@ export class AudioPlayer {
       element.addEventListener('canplay', onCanPlay);
       element.addEventListener('seeked', onCanPlay);
       element.addEventListener('error', onError);
-      element.src = apiUrl(url);
+      // Miroir audio (adresse complète) tel quel ; chemin relatif : notre serveur.
+      element.src = /^https?:\/\//.test(url) ? url : apiUrl(url);
       element.load();
     });
   }

@@ -1,12 +1,18 @@
 import { apiUrl } from './server';
 
+/** Nouvelles tentatives si le CDN vidéo refuse la requête (il limite les requêtes rapprochées). */
+const RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
+
 /**
- * Précharge la vidéo de la révélation pendant l'écoute (URL opaque, rien
- * à voir dans l'onglet réseau). Le navigateur la télécharge en une seule
- * requête depuis le début : le CDN vidéo supporte mal les requêtes rapprochées.
+ * Charge la vidéo de la révélation, directement depuis AnimeThemes (lien reçu avec
+ * la révélation : la réponse est connue, rien à cacher) sans passer par notre serveur.
+ * Le navigateur la télécharge en une seule requête : le CDN vidéo supporte mal les
+ * requêtes rapprochées.
  */
 export class VideoPreloader {
   private current: { round: number; element: HTMLVideoElement } | null = null;
+  private retryTimer: number | null = null;
   private volume = 0.8;
 
   /**
@@ -30,7 +36,20 @@ export class VideoPreloader {
         { once: true },
       );
     }
-    element.src = apiUrl(url);
+    // Lien direct (AnimeThemes) tel quel ; chemin relatif : notre serveur.
+    const src = /^https?:\/\//.test(url) ? url : apiUrl(url);
+    let attempts = 0;
+    element.addEventListener('error', () => {
+      if (attempts >= RETRIES || this.current?.element !== element) return;
+      attempts++;
+      this.retryTimer = window.setTimeout(() => {
+        this.retryTimer = null;
+        if (this.current?.element !== element) return;
+        element.src = src;
+        element.load();
+      }, RETRY_DELAY_MS);
+    });
+    element.src = src;
     element.load();
     this.current = { round, element };
   }
@@ -47,6 +66,8 @@ export class VideoPreloader {
 
   /** Arrête la vidéo et libère la connexion. */
   release(): void {
+    if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     if (!this.current) return;
     const { element } = this.current;
     element.pause();

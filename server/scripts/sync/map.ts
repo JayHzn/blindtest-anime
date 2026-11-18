@@ -19,12 +19,14 @@ export interface SyncSources {
 }
 
 /**
- * Préférence de vidéo : sans scènes d'épisode, sans crédits, puis la plus légère
- * (la vidéo transite par notre proxy et se précharge pendant les 15 s d'écoute).
+ * Préférence de vidéo : sans scènes d'épisode, puis 720p ou moins, puis sans crédits,
+ * puis la plus légère. La vidéo est chargée par chaque navigateur au moment de la
+ * révélation : un fichier 2 à 3 fois plus léger compte plus que des crédits à l'écran.
  */
 function videoScore(video: AtVideo): number {
   let score = 0;
-  if (video.overlap === 'NONE') score += 4;
+  if (video.overlap === 'NONE') score += 8;
+  if ((video.resolution ?? 1080) <= 720) score += 4;
   if (video.nc) score += 2;
   // Départage : résolution la plus basse (au moins 360p).
   const resolution = video.resolution ?? 1080;

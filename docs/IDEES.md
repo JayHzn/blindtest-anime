@@ -38,6 +38,15 @@ Les modes Playlist des joueurs, Enchères, Plus ou moins et Imposteur sont pass�
   - Calage sur un temps fort, léger panoramique gauche/droite.
   - Test de faisabilité sur une centaine de chansons avant tout engagement.
 
+## Retenus, règles à définir
+
+- **Quel est le bon OP ? (blindtest à l'envers)** : on voit le titre d'un anime, on écoute 4 courts extraits, il faut retrouver le sien. Les 3 autres sont des chansons proches (même tirage que l'Imposteur : même type, même époque, popularité voisine). Solo et multi ; peut servir de mode Facile.
+  - À trancher : durée des extraits, réécoute libre ou limitée, points selon la rapidité ou fixes, un essai ou plusieurs, OP et ED mélangés.
+- **Chronologie** : 4 extraits à remettre dans l'ordre de sortie de l'anime, sur une frise. Solo et multi ; les années sont déjà dans le catalogue.
+  - À trancher : nombre de chansons (4, 5 ?), points par chanson bien placée ou tout-ou-rien, départage des animes de la même année (saison ?), afficher les titres ou seulement le son.
+- **Likes et playlist** : liker les chansons entendues pendant les parties pour se faire sa propre playlist, à exporter vers Spotify ou YouTube Music.
+  - À trancher : likes gardés dans le navigateur (sans compte) ou comptes (et alors quelle base de données, Render n'ayant pas de disque permanent en gratuit) ; export par lien, liste à importer (Soundiiz, TuneMyMusic) ou connexion directe à Spotify / YouTube.
+
 ## À creuser
 
 - **Extraits trafiqués** : son inversé, basses seules, voix supprimée, version 8-bit simulée (Web Audio).

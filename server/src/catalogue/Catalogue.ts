@@ -133,6 +133,11 @@ export class Catalogue {
     return lang === 'fr' ? (franchise.nameFr ?? franchise.name) : franchise.name;
   }
 
+  /** Musiques qui respectent ces filtres (copie du miroir audio). */
+  themesMatching(filters: ThemeFilters): ThemeRow[] {
+    return this.themeList.filter(this.themeFilter(filters));
+  }
+
   /** Nombre de musiques disponibles avec ces filtres. */
   countThemes(filters: ThemeFilters): number {
     return this.themeList.filter(this.themeFilter(filters)).length;

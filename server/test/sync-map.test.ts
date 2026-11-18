@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCatalogueData, pickGenre } from '../scripts/sync/map';
+import { buildCatalogueData, mapThemes, pickGenre } from '../scripts/sync/map';
 import { parseFrenchLabel } from '../src/catalogue/titles';
 import { sources } from './fixtures/sources';
 
@@ -54,6 +54,36 @@ describe('buildCatalogueData', () => {
     expect(theme(1002)).toBeUndefined();
     expect(theme(1001)?.videoUrl).toContain('NCBD720');
     expect(theme(1001)?.artists).toBe('Linked Horizon');
+  });
+
+  it('préfère une vidéo 720p avec crédits à une 1080p sans crédits (plus légère à charger)', () => {
+    const video = (basename: string, resolution: number, nc: boolean) => ({
+      basename,
+      link: `https://v.animethemes.moe/${basename}`,
+      resolution,
+      nc,
+      overlap: 'NONE',
+      audio: { link: `https://a.animethemes.moe/${basename}.ogg` },
+    });
+    const [row] = mapThemes(1, [
+      {
+        id: 9,
+        type: 'OP',
+        sequence: 1,
+        slug: 'OP1',
+        group: null,
+        song: null,
+        entries: [
+          {
+            version: 1,
+            nsfw: false,
+            spoiler: false,
+            videos: { nodes: [video('NC1080.webm', 1080, true), video('TV720.webm', 720, false)] },
+          },
+        ],
+      },
+    ]);
+    expect(row?.videoUrl).toContain('TV720');
   });
 
   it('garde les insert songs', () => {

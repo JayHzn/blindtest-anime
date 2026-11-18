@@ -52,6 +52,8 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
     container.appendChild(element);
 
     const onPlaying = () => {
+      // Arrivée après une erreur (nouvelle tentative réussie) : la vidéo remplace la jaquette.
+      setFailed(false);
       element.muted = false;
       session.audio.fadeOut(round, 300);
       setPlaying(true);
