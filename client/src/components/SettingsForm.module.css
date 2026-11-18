@@ -88,8 +88,8 @@
 
 /* Règles du mode choisi : carte qui prend la place libre à droite du dernier mode */
 .rules {
-  grid-column: auto / -1;
   min-width: 0;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);

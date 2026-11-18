@@ -9,6 +9,7 @@ import {
   type PopularityTier,
   type ThemeType,
 } from '@blindtest/shared';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n/context';
 import type { MessageKey } from '../i18n/fr';
 import { ChipGroup } from './ui/ChipGroup';
@@ -58,6 +59,25 @@ export function SettingsForm({
   modes = SOLO_MODES,
 }: SettingsFormProps) {
   const { t } = useI18n();
+  const grid = useRef<HTMLDivElement>(null);
+  const [rulesSpan, setRulesSpan] = useState(1);
+
+  // Carte des règles : elle prend toute la place libre à droite du dernier mode
+  // (ou une ligne entière si la dernière ligne est pleine). Le nombre de colonnes
+  // dépend de la largeur : recalculé quand la grille change de taille.
+  useLayoutEffect(() => {
+    const element = grid.current;
+    if (!element) return;
+    const update = () => {
+      const columns = getComputedStyle(element).gridTemplateColumns.split(' ').length;
+      const free = columns - (modes.length % columns);
+      setRulesSpan(free === 0 ? columns : free);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [modes.length]);
   const playlist = settings.mode === 'playlist';
   const higherLower = settings.mode === 'higherLower';
   const songsPerPlayer = settings.songsPerPlayer ?? PLAYLIST.songsDefault;
@@ -86,7 +106,7 @@ export function SettingsForm({
     <div className={styles.form}>
       <section className={styles.section}>
         <h2 className={styles.label}>{t('setup.mode')}</h2>
-        <div className={styles.modes} role="radiogroup" aria-label={t('setup.mode')}>
+        <div ref={grid} className={styles.modes} role="radiogroup" aria-label={t('setup.mode')}>
           {modes.map((mode) => (
             <button
               key={mode}
@@ -102,7 +122,11 @@ export function SettingsForm({
             </button>
           ))}
           {/* Règles du mode choisi, dans la place libre de la grille : visibles par tous. */}
-          <div className={styles.rules} aria-live="polite">
+          <div
+            className={styles.rules}
+            style={{ gridColumn: `span ${rulesSpan}` }}
+            aria-live="polite"
+          >
             <h3 className={styles.rulesTitle}>
               {t('setup.rules')} · {t(`setup.mode.${settings.mode}`)}
             </h3>
