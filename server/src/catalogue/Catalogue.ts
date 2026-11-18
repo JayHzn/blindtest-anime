@@ -351,8 +351,19 @@ export class Catalogue {
       }
     }
 
-    const sequenceExact = correct && answer.sequence === theme.sequence;
+    // Un seul opening et un seul ending : le numéro n'apporte rien, pas de bonus.
+    const sequenceExact =
+      correct && answer.sequence === theme.sequence && !this.singleThemeAnime(target.id);
     return { correct, seasonExact, sequenceExact };
+  }
+
+  /** L'anime n'a qu'un opening et qu'un ending (le numéro d'OP/ED est évident). */
+  private singleThemeAnime(animeId: number): boolean {
+    const themes = this.themesByAnime.get(animeId) ?? [];
+    return (
+      themes.filter((theme) => theme.type === 'OP').length <= 1 &&
+      themes.filter((theme) => theme.type === 'ED').length <= 1
+    );
   }
 
   private themeFilter(filters: ThemeFilters): (theme: ThemeRow) => boolean {
@@ -402,6 +413,7 @@ export class Catalogue {
         p: anime.popularity,
       };
       if (multi) entry.s = 1;
+      if (this.singleThemeAnime(anime.id)) entry.u = 1;
       entries.push(entry);
     }
     return entries;

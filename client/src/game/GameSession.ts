@@ -548,6 +548,20 @@ export class GameSession {
     videoUrl: string | null,
     ownSong: boolean,
   ): void {
+    // Départ commun dans le futur : le « 3-2-1 » se prolonge jusqu'à cette heure, et
+    // l'écoute (chrono, vinyle, son) commence pile en même temps pour tout le monde.
+    const delay = startedAt - serverNow();
+    if (delay > 0) {
+      if (this.state.phase === 'countdown') this.update({ phaseEndsAt: startedAt });
+      this.clipTimers.push(
+        window.setTimeout(() => {
+          if (!this.disposed && this.state.round === round) {
+            this.onStart(round, startedAt, phaseEndsAt, videoUrl, ownSong);
+          }
+        }, delay),
+      );
+      return;
+    }
     this.clearTicks();
     this.update({
       phase: 'listening',
@@ -561,12 +575,15 @@ export class GameSession {
       this.listenStart = { round, startedAt };
       this.scheduleClips(round, startedAt);
     } else if (this.isProgressive) {
-      // Premier palier joué automatiquement ; la vidéo se précharge au début de l'extrait.
-      void this.playTier();
+      // Premier palier joué automatiquement, à l'heure fixée par le serveur ;
+      // la vidéo se précharge au début de l'extrait.
+      this.atServerTime(startedAt, round, () => void this.playTier());
       this.video.preload(round, videoUrl, startTime);
     } else {
       this.listenStart = { round, startedAt };
-      this.audio.play(round, startedAt);
+      // Départ commun fixé par le serveur, un peu dans le futur : l'extrait part pile à
+      // cette heure, depuis sa position préchargée (instantané et synchronisé).
+      this.atServerTime(startedAt, round, () => this.audio.play(round, startedAt));
       // La vidéo se précharge à l'endroit où l'extrait sera à la fin de l'écoute.
       const listenS = MODE_TIMINGS.classic.listenMs / 1000;
       this.video.preload(round, videoUrl, startTime + listenS - 1);
@@ -802,6 +819,22 @@ export class GameSession {
     if (!this.disposed && snippet === this.snippetCount && this.state.round === round) {
       this.update({ snippetPlaying: false, clip: null });
     }
+  }
+
+  /** Lance `action` à l'heure serveur `time` (tout de suite si elle est passée), pour cette manche. */
+  private atServerTime(time: number, round: number, action: () => void): void {
+    const delay = time - serverNow();
+    if (delay <= 0) {
+      action();
+      return;
+    }
+    this.clipTimers.push(
+      window.setTimeout(() => {
+        if (!this.disposed && this.state.round === round && this.state.phase === 'listening') {
+          action();
+        }
+      }, delay),
+    );
   }
 
   private clearClipTimers(): void {

@@ -109,4 +109,13 @@ describe('Catalogue.titleIndex', () => {
     expect(kimi?.t).toContain('your name');
     expect(catalogue.titleIndex.entries.some((e) => e.k === 'f' && e.id === kimi?.f)).toBe(false);
   });
+
+  it("signale les animes à un seul opening et un seul ending (numéro d'OP/ED inutile)", () => {
+    const entry = (id: number) =>
+      catalogue.titleIndex.entries.find((e) => e.k === 'a' && e.id === id);
+    // SnK saison 1 : OP1 et un ED (le doublage et l'insert song ne comptent pas).
+    expect(entry(100)?.u).toBe(1);
+    // SnK saison 3 : OP1 et OP2.
+    expect(entry(101)?.u).toBeUndefined();
+  });
 });

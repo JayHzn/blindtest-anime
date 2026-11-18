@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { search, type AnswerPayload, type SearchIndex, type TitleEntry } from '@blindtest/shared';
 import { useI18n } from '../../i18n/context';
 import styles from './AnswerForm.module.css';
@@ -28,8 +28,13 @@ export function AnswerForm({
   const [sequence, setSequence] = useState('');
   const [highlight, setHighlight] = useState(0);
   const [open, setOpen] = useState(false);
+  /** Suggestion choisie, pas encore validée (le temps de taper le numéro d'OP/ED). */
+  const [picked, setPicked] = useState<TitleEntry | null>(null);
   const listId = useId();
   const sequenceId = useId();
+  const sequenceRef = useRef<HTMLInputElement>(null);
+  // Anime à un seul opening et un seul ending : le numéro n'apporte rien.
+  const showSequence = bonuses && !picked?.u;
 
   const suggestions = useMemo(
     () => (index && text.trim() ? search(index, text, MAX_SUGGESTIONS).map((r) => r.entry) : []),
@@ -37,18 +42,38 @@ export function AnswerForm({
   );
   const showList = open && suggestions.length > 0 && !disabled;
 
-  const submit = (entry?: TitleEntry) => {
+  const submit = (entry: TitleEntry | null = picked) => {
     const typed = entry ? entry[lang] : text.trim();
     if (!typed || disabled) return;
     const number = Number.parseInt(sequence, 10);
+    const withSequence = bonuses && !entry?.u && Number.isInteger(number) && number > 0;
     onSubmit({
       text: typed,
       ...(entry && { pick: { kind: entry.k === 'f' ? 'franchise' : 'anime', id: entry.id } }),
-      ...(Number.isInteger(number) && number > 0 && { sequence: number }),
+      ...(withSequence && { sequence: number }),
     });
     // Champ vidé tout de suite : en cas d'erreur, le joueur retape directement.
     setText('');
+    setPicked(null);
     setOpen(false);
+  };
+
+  /**
+   * Suggestion choisie : elle est validée tout de suite si le numéro d'OP/ED est déjà
+   * tapé ou ne sert à rien (pas de bonus, ou un seul opening et un seul ending) ; sinon
+   * elle s'inscrit dans le champ et la main passe au numéro, validé ensuite (Entrée ou
+   * « Valider »).
+   */
+  const choose = (entry: TitleEntry) => {
+    // Numéro déjà tapé (ou inutile) : on valide tout de suite, sans touche de plus.
+    if (!bonuses || entry.u || sequence !== '') {
+      submit(entry);
+      return;
+    }
+    setPicked(entry);
+    setText(entry[lang]);
+    setOpen(false);
+    sequenceRef.current?.focus();
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -61,7 +86,8 @@ export function AnswerForm({
       setHighlight((h) => (h - 1 + suggestions.length) % suggestions.length);
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      submit(showList ? suggestions[highlight] : undefined);
+      if (showList) choose(suggestions[highlight]!);
+      else submit();
     } else if (event.key === 'Escape') {
       setOpen(false);
     }
@@ -97,6 +123,7 @@ export function AnswerForm({
             spellCheck={false}
             onChange={(event) => {
               setText(event.target.value);
+              setPicked(null);
               setHighlight(0);
               setOpen(true);
             }}
@@ -119,7 +146,7 @@ export function AnswerForm({
                   className={[styles.option, i === highlight ? styles.highlighted : ''].join(' ')}
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setHighlight(i)}
-                  onClick={() => submit(entry)}
+                  onClick={() => choose(entry)}
                 >
                   <span className={styles.optionTitle}>{entry[lang]}</span>
                   {entry.k === 'f' ? (
@@ -136,10 +163,11 @@ export function AnswerForm({
         </div>
       </div>
 
-      {bonuses ? (
+      {showSequence ? (
         <div className={styles.sequence}>
           <label htmlFor={sequenceId}>{t('game.sequence.label')}</label>
           <input
+            ref={sequenceRef}
             id={sequenceId}
             className={styles.sequenceInput}
             inputMode="numeric"

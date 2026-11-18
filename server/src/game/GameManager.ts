@@ -10,7 +10,7 @@ import {
 import type { Catalogue } from '../catalogue/Catalogue';
 import type { ThemeRow } from '../catalogue/types';
 import type { MediaRegistry } from '../media/MediaRegistry';
-import { Game, type GameEmitter } from './Game';
+import { Game, LISTEN_LEAD_MS, type GameEmitter } from './Game';
 
 /** Musiques de rechange tirées en plus, au cas où un audio ne charge pas. */
 const SPARE_THEMES = 5;
@@ -105,6 +105,7 @@ export class GameManager {
       impostorThemes,
       introMs,
       audioWaitMs,
+      listenLeadMs: LISTEN_LEAD_MS,
       onFinished: (finished) => {
         this.forget(finished);
         onFinished?.(finished);

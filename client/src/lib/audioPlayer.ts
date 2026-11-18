@@ -12,6 +12,19 @@ interface Track {
 const PRELOAD_TIMEOUT_MS = 15_000;
 /** Marge au-delà de la durée d'un extrait : un son bloqué (pas encore chargé) ne le fait pas durer sans fin. */
 const SNIPPET_STALL_MS = 2000;
+/**
+ * En dessous de ce retard, l'extrait part de sa position préchargée sans se
+ * repositionner : un repositionnement jette le son déjà chargé et le navigateur
+ * le recharge (mesuré : 0,7 s en local, 1 à 2 s en ligne) — bien pire que le retard.
+ */
+const RESYNC_THRESHOLD_S = 1;
+/** Écart toléré avant de repositionner un extrait (évite un rechargement inutile). */
+const SEEK_EPSILON_S = 0.05;
+
+/** Place la lecture à `time` seulement si elle n'y est pas déjà (garde le son chargé). */
+function seekTo(element: HTMLAudioElement, time: number): void {
+  if (Math.abs(element.currentTime - time) > SEEK_EPSILON_S) element.currentTime = time;
+}
 
 /**
  * Lecture des extraits : préchargement à l'avance, démarrage synchronisé
@@ -88,7 +101,9 @@ export class AudioPlayer {
     const track = this.tracks.get(round);
     if (!track) return;
     const lateBy = Math.max(0, serverNow() - startedAt) / 1000;
-    track.element.currentTime = track.startTime + lateBy;
+    // Petit retard (réseau) : on part tout de suite du point préchargé. Gros retard
+    // (reconnexion en pleine écoute) : on rattrape l'extrait là où il en est.
+    seekTo(track.element, track.startTime + (lateBy < RESYNC_THRESHOLD_S ? 0 : lateBy));
     track.element.volume = this.volume;
     // Lecture refusée : la manche continue, et le joueur peut réactiver le son.
     void track.element.play().catch(this.handlePlayError);
@@ -116,7 +131,9 @@ export class AudioPlayer {
     const { element } = track;
     const endAt = track.startTime + durationMs / 1000;
     const giveUpAt = performance.now() + durationMs - offsetMs + SNIPPET_STALL_MS;
-    element.currentTime = track.startTime + Math.max(0, offsetMs) / 1000;
+    // Même règle que `play` : un petit retard ne vaut pas un rechargement du son.
+    const offsetS = offsetMs / 1000 < RESYNC_THRESHOLD_S ? 0 : offsetMs / 1000;
+    seekTo(element, track.startTime + offsetS);
     element.volume = this.volume;
     void element.play().catch(this.handlePlayError);
 

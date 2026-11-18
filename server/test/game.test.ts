@@ -100,6 +100,47 @@ describe('Game — mode Classique', () => {
     expect(reveal.players[0]?.score).toBe(220);
   });
 
+  it('fixe un départ commun un peu dans le futur ; les points comptent depuis ce départ', () => {
+    const events: Emitted[] = [];
+    const game = new Game({
+      settings: { ...DEFAULT_SETTINGS, mode: 'classic', rounds: 1 },
+      catalogue,
+      media: new MediaRegistry(),
+      emitter: { toPlayer: (to, event, ...args) => events.push({ to, event, payload: args[0] }) },
+      themes: [catalogue.getTheme(1011)!],
+      listenLeadMs: 500,
+    });
+    game.addPlayer('p1', 'Alice');
+    game.start();
+    const audio = events.find((e) => e.event === 'round:prepare')!.payload as RoundAudio;
+    game.audioReady('p1', 0, audio.url);
+    vi.advanceTimersByTime(countdownMs);
+    const start = events.find((e) => e.event === 'round:start')!.payload as {
+      startedAt: number;
+      phaseEndsAt: number;
+    };
+    // Le navigateur reçoit le départ avant l'heure et lance l'extrait pile à ce moment.
+    expect(start.startedAt - Date.now()).toBe(500);
+    expect(start.phaseEndsAt - start.startedAt).toBe(listenMs);
+    vi.advanceTimersByTime(500 + 3000);
+    expect(game.answer('p1', { text: 'Attack on Titan Season 3' })).toMatchObject({
+      correct: true,
+      points: classicPoints(3000, listenMs) + 25,
+    });
+  });
+
+  it('pas de bonus de numéro pour un anime à un seul opening et un seul ending', () => {
+    // SnK saison 1 : un seul OP et un seul ED (le numéro est forcément 1).
+    expect(catalogue.validate(1001, { text: 'Shingeki no Kyojin', sequence: 1 })).toMatchObject({
+      correct: true,
+      sequenceExact: false,
+    });
+    // SnK saison 3 : OP1 et OP2, le numéro compte.
+    expect(
+      catalogue.validate(1011, { text: 'Attack on Titan Season 3', sequence: 1 }),
+    ).toMatchObject({ correct: true, sequenceExact: true });
+  });
+
   it("attend l'audio, puis le laisse démarrer dès qu'il est prêt, avec tout son temps", () => {
     const t = setup();
     t.game.start();

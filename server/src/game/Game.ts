@@ -63,6 +63,12 @@ export interface GameEmitter {
 
 /** Attente maximale de l'audio des joueurs après le compte à rebours. */
 export const AUDIO_WAIT_MS = 10_000;
+/**
+ * Avance de l'heure de départ commune de l'écoute : chaque navigateur reçoit
+ * `round:start` avant cette heure et lance l'extrait pile à ce moment, depuis sa
+ * position préchargée (instantané, et synchronisé entre les joueurs).
+ */
+export const LISTEN_LEAD_MS = 500;
 /** Délai avant d'arrêter une partie dont tous les joueurs sont déconnectés. */
 export const ABANDON_GRACE_MS = 30_000;
 /** Le point de départ est tiré entre 0 et 60 % du morceau (il reste toujours de quoi écouter). */
@@ -140,6 +146,8 @@ export interface GameOptions {
   introMs?: number;
   /** Attente maximale des retardataires avant de démarrer l'écoute. */
   audioWaitMs?: number;
+  /** Avance de l'heure de départ commune de l'écoute (`LISTEN_LEAD_MS` dans les vraies parties). */
+  listenLeadMs?: number;
 }
 
 /**
@@ -159,6 +167,7 @@ export class Game {
   private readonly onFinished?: (game: Game) => void;
   private readonly introMs: number;
   private readonly audioWaitMs: number;
+  private readonly listenLeadMs: number;
 
   private readonly players = new Map<string, PlayerState>();
   /** Pseudos de tous les joueurs passés par la partie (révélation d'un joueur parti). */
@@ -194,6 +203,7 @@ export class Game {
     this.onFinished = options.onFinished;
     this.introMs = options.introMs ?? this.timing.countdownMs;
     this.audioWaitMs = options.audioWaitMs ?? AUDIO_WAIT_MS;
+    this.listenLeadMs = options.listenLeadMs ?? 0;
 
     // Plus ou moins : toute la chaîne tirée est jouable (la partie s'arrête à l'élimination).
     const wanted =
@@ -411,11 +421,12 @@ export class Game {
       !current.starts.has(playerId) &&
       this.isPlayerReady(player)
     ) {
-      this.startPlayer(current, playerId, Date.now());
-      const deadline = Date.now() + this.listenMs;
+      const startsAt = Date.now() + this.listenLeadMs;
+      this.startPlayer(current, playerId, startsAt);
+      const deadline = startsAt + this.listenMs;
       if (deadline > this.phaseEndsAt) {
         this.phaseEndsAt = deadline;
-        this.schedule(this.listenMs, () => this.endRound());
+        this.schedule(deadline - Date.now(), () => this.endRound());
       }
     }
   }
@@ -788,11 +799,12 @@ export class Game {
 
   private startListening(): void {
     const round = this.rounds[this.roundIndex]!;
-    const now = Date.now();
+    // Départ commun un peu dans le futur : le temps que `round:start` arrive partout.
+    const startsAt = Date.now() + this.listenLeadMs;
     this.waitingForAudio = false;
     this.phase = 'listening';
-    round.listenStartedAt = now;
-    this.phaseEndsAt = now + this.listenMs;
+    round.listenStartedAt = startsAt;
+    this.phaseEndsAt = startsAt + this.listenMs;
     // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque
     // (Plus ou moins : révélation sans vidéo, avec les jaquettes).
     if (round.theme.videoUrl && !round.videoToken && !this.isHigherLower) {
@@ -802,11 +814,11 @@ export class Game {
     for (const player of this.connectedPlayers()) {
       // Plus ou moins : les éliminés écoutent sans répondre.
       if (!this.eliminatedAt.has(player.id)) round.participants.add(player.id);
-      if (this.isPlayerReady(player)) this.startPlayer(round, player.id, now);
+      if (this.isPlayerReady(player)) this.startPlayer(round, player.id, startsAt);
     }
     // Préchargement de la manche suivante pendant l'écoute.
     if (!this.preparedRounds.has(this.roundIndex + 1)) this.emitPrepare(this.roundIndex + 1);
-    this.schedule(this.listenMs, () => this.endRound());
+    this.schedule(this.listenLeadMs + this.listenMs, () => this.endRound());
   }
 
   /**

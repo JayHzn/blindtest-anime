@@ -34,6 +34,11 @@ export interface TitleEntry {
   p: number;
   /** 1 si l'anime appartient à une franchise de plusieurs saisons (bonus saison possible). */
   s?: 1;
+  /**
+   * 1 si l'anime n'a qu'un opening et qu'un ending : le numéro d'OP/ED n'apporte rien,
+   * le champ « N° OP/ED » est masqué une fois l'anime choisi.
+   */
+  u?: 1;
 }
 
 /** Réponse envoyée par un joueur. */

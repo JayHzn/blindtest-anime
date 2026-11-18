@@ -39,7 +39,9 @@ Validé le 2026-11-17.
     - préchargement des **2 chansons suivantes** ;
     - le son est **décodé à l'avance** (Web Audio, `AudioBuffer`), pour un démarrage instantané et précis ;
     - connexion ouverte vers le serveur des sons dès l'arrivée sur le site (`preconnect`) ;
-    - fichiers à noms aléatoires servis avec un **cache permanent** (`Cache-Control: immutable`).
+    - fichiers à noms aléatoires servis avec un **cache permanent** (`Cache-Control: immutable`) ;
+    - **départ commun programmé** (2026-11-18) : le serveur fixe l'heure de départ de l'écoute 0,5 s dans le futur (`LISTEN_LEAD_MS`) ; chaque navigateur prolonge le « 3-2-1 » jusqu'à cette heure, puis lance chrono et extrait ensemble, depuis la position préchargée. Mesuré avec 200 ms de délai réseau simulé : son et chrono démarrent à 0-2 ms près (avant : 0,7 s de silence en local, 1 à 2 s en ligne, parce que le lecteur se repositionnait pour rattraper le retard réseau et rechargeait le son) ;
+    - filet de sécurité : un retard de moins d'1 s ne fait jamais repositionner un extrait (le son chargé est gardé) ; au-delà (reconnexion en pleine écoute), on rattrape l'extrait là où il en est.
   - **Découpage en morceaux de 5 s** (miroir R2, à confirmer par un test) :
     - chaque chanson est encodée une seule fois, puis découpée en morceaux de 5 s ;
     - le client ne charge que les morceaux couvrant l'extrait (environ 200 Ko au lieu d'environ 1 Mo), puis les recolle avant de jouer ;
@@ -88,6 +90,8 @@ Validé le 2026-11-17.
 - Bonus de précision (indépendants de la rapidité, uniquement si l'anime est correct) :
   - +25 saison exacte (proposé seulement si la franchise a plusieurs entrées)
   - +25 bon numéro d'OP/ED (champ facultatif)
+- Choisir une suggestion (clic ou Entrée) l'inscrit dans le champ et passe la main au numéro d'OP/ED ; on valide ensuite (Entrée ou « Valider »). Validée tout de suite si le numéro est déjà tapé, si l'anime n'a qu'un opening et qu'un ending (indicateur `u` de l'index des titres ; le champ du numéro est alors masqué), ou sans bonus (Enchères, Imposteur).
+- Anime à un seul opening et un seul ending : jamais de bonus de numéro (le numéro est évident), même tapé à la main (décidé le 2026-11-18).
 
 ## Modes de jeu
 
