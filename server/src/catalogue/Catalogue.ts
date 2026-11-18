@@ -1,8 +1,12 @@
 import Database from 'better-sqlite3';
 import {
+  HIGHER_LOWER,
   compact,
   fuzzyMatch,
+  inRatioWindow,
   normalize,
+  popularityRatio,
+  ratioWindow,
   type AnswerPayload,
   type AnswerVerdict,
   type CatalogueStats,
@@ -175,6 +179,67 @@ export class Catalogue {
       if (picked.length === count) break;
     }
     return picked;
+  }
+
+  /**
+   * Plus ou moins : enchaîne `length` musiques (filtres de la partie, jamais deux fois
+   * la même franchise, animes sans popularité AniList exclus). La musique N (tour N)
+   * respecte l'écart du tour avec la précédente ; à défaut, la plus proche de cet écart.
+   * `prefix` : début de chaîne gardé (remplacement d'un audio injouable).
+   * Renvoie une chaîne plus courte si le catalogue est épuisé.
+   */
+  higherLowerChain(
+    filters: ThemeFilters,
+    length: number,
+    random: () => number = Math.random,
+    prefix: readonly ThemeRow[] = [],
+    excludeFranchises: ReadonlySet<number> = new Set(),
+  ): ThemeRow[] {
+    const filter = this.themeFilter(filters);
+    const candidates = this.themeList.filter(
+      (theme) => filter(theme) && this.anime.get(theme.animeId)!.popularity > 0,
+    );
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
+    }
+    const chain = [...prefix];
+    const used = new Set(excludeFranchises);
+    for (const theme of chain) used.add(this.anime.get(theme.animeId)!.franchiseId);
+
+    while (chain.length < length) {
+      const previous = chain[chain.length - 1];
+      const window = ratioWindow(chain.length);
+      const reference = previous ? this.anime.get(previous.animeId)!.popularity : 0;
+      let pick: ThemeRow | undefined;
+      let fallback: ThemeRow | undefined;
+      let fallbackDistance = Number.POSITIVE_INFINITY;
+      for (const theme of candidates) {
+        const anime = this.anime.get(theme.animeId)!;
+        if (used.has(anime.franchiseId)) continue;
+        if (!previous) {
+          pick = theme;
+          break;
+        }
+        const ratio = popularityRatio(reference, anime.popularity);
+        if (ratio < HIGHER_LOWER.minRatio) continue;
+        if (inRatioWindow(ratio, window)) {
+          pick = theme;
+          break;
+        }
+        // Écart hors fenêtre : distance (en rapport) à la fenêtre, pour le repli.
+        const distance = ratio < window.min ? window.min / ratio : ratio / (window.max ?? ratio);
+        if (distance < fallbackDistance) {
+          fallback = theme;
+          fallbackDistance = distance;
+        }
+      }
+      const next = pick ?? fallback;
+      if (!next) break;
+      chain.push(next);
+      used.add(this.anime.get(next.animeId)!.franchiseId);
+    }
+    return chain;
   }
 
   /** Valide la réponse d'un joueur pour une musique donnée. */

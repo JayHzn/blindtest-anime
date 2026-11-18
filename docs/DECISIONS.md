@@ -183,6 +183,37 @@ Validé le 2026-11-17 (maquette : https://claude.ai/artifact/XcACCcnxgKHnBmUUtSf
   - préchargement inchangé : la chanson suivante part au début de l'annonce ; l'extrait attend le son de celui qui a la main 3 s au maximum, puis part quand même ;
   - la vidéo de révélation se précharge dès l'annonce et reprend là où le dernier extrait s'est arrêté.
 
+### Plus ou moins (v2, solo et multi)
+
+Validé le 2026-11-17 (maquette : https://claude.ai/artifact/XB4rhpAbMMXY5yeoM9RTKt), mis en œuvre le 2026-11-18.
+
+- **Principe** : la nouvelle chanson vient-elle d'un anime plus ou moins populaire que la référence ? Popularité = nombre de membres AniList de l'anime. Pas de réponse tapée : deux boutons.
+- **Extrait** : 10 s, point de départ tiré entre 0 et 60 % du morceau (comme le Classique).
+- **Tour 1** : A (10 s), puis B (10 s), puis 10 s pour choisir ; le choix s'ouvre dès que B commence. Boutons « A est plus populaire » / « B est plus populaire ».
+- **Tours suivants** : la référence (chanson du tour précédent) est affichée en clair : jaquette, titre, OP/ED, chanson, artiste, année, membres. Seule la nouvelle chanson est jouée (10 s), puis 10 s pour choisir ; le choix est possible dès le début de l'extrait.
+- **Réécoute** libre des deux chansons pendant le tour (côté navigateur, rien n'est compté).
+- **Choix définitif**. Pas de réponse à temps = erreur.
+- **Écart de popularité** (rapport entre les deux nombres de membres) : ≥ ×1,5 (tours 1 à 3), ×1,3 à ×3 (4 à 6), ×1,2 à ×2 (7 à 9), ×1,1 à ×1,5 (10 et plus). Jamais d'égalité (écart minimal ×1,1).
+- **Révélation** : 6 s, jaquettes (pas de vidéo), membres, écart, choix de chacun, puis décompte de 3 s.
+- **Élimination** : une erreur élimine. En solo (ou seul en room), elle termine la partie.
+- **Pas de réglage de manches** (masqué) : 30 tours au plus, puis les joueurs encore en jeu finissent ex æquo. Les filtres de la room (popularité, type, années) s'appliquent au tirage.
+- **Multi** (choix par défaut de la maquette, acceptés tels quels) :
+  - on voit qui a répondu (coche « a répondu »), jamais quoi, avant la révélation ;
+  - tous faux au même tour : personne n'est éliminé ;
+  - les éliminés restent en spectateurs (son, révélations) sans répondre ; un joueur arrivé en cours de partie regarde aussi ;
+  - la partie s'arrête quand il ne reste qu'un joueur en jeu (il gagne) ;
+  - classement : selon le tour d'élimination (le plus tardif d'abord), puis le nombre de bonnes réponses.
+- **Record solo** : la plus longue série, par réglages (popularité, type, années), gardée dans le navigateur.
+- **Écran de fin** : en solo, longueur de la série, record, l'erreur qui l'a arrêtée (les deux animes, l'écart, le choix fait) et toute la chaîne ; en multi, gagnant, classement (« Élimination au tour N · X justes sur Y tours »), tours où tout le monde s'est trompé et écart le plus serré.
+- Détails (mise en œuvre) :
+  - la chaîne entière (31 chansons) est **tirée au lancement** : jamais deux fois la même franchise, animes sans popularité AniList exclus ; chaque chanson respecte l'écart de son tour avec la précédente, sinon (catalogue trop petit avec les filtres) celle qui s'en rapproche le plus ; une chaîne trop courte termine la partie plus tôt ;
+  - la manche N du moteur est le tour N ; la chanson 0 (A) ne sert que de première référence. Au lancement, les chansons 0, 1 et 2 sont préchargées ; pendant le tour N, la chanson N+1 ;
+  - le tour 1 attend que A et B soient prêts chez chacun (mêmes règles d'attente que les autres modes) ; chaque joueur a son propre chrono (30 s au tour 1, 20 s ensuite) ;
+  - le navigateur joue A puis B (ou la nouvelle chanson) à l'heure fixée par le serveur et garde la référence en mémoire pour la réécoute ;
+  - le serveur arbitre le choix (`higherLower:pick`) : refusé avant le début de B (300 ms de tolérance) ou après la fin du temps ; la révélation arrive dès que tous les joueurs encore en jeu ont choisi ;
+  - le score d'un joueur compte ses bonnes réponses ; `eliminatedAt` (tour d'élimination, 0 pour un spectateur arrivé en cours de partie) sert au classement ;
+  - un audio injouable (pas encore joué) est remplacé en retirant la suite de la chaîne à partir de lui, pour que chaque écart reste respecté.
+
 ### Feuille de route
 
 - Facile (QCM 4 choix)

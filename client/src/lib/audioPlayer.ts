@@ -95,19 +95,28 @@ export class AudioPlayer {
   }
 
   /**
-   * Mode Progressif : joue `durationMs` depuis le point de départ, puis s'arrête.
-   * Résout quand l'extrait est fini (ou interrompu par un autre).
+   * Modes Progressif, Enchères, Plus ou moins : joue `durationMs` depuis le point de
+   * départ, puis s'arrête. Résout quand l'extrait est fini (ou interrompu par un autre).
+   * - `offsetMs` : reprend l'extrait en cours de route (arrivée en retard) ;
+   * - `keepFrom` : garde les audios à partir de cette manche (Plus ou moins : la
+   *   référence reste réécoutable), les plus anciens sont libérés.
    */
-  playSnippet(round: number, durationMs: number): Promise<void> {
-    this.releaseBefore(round);
+  playSnippet(
+    round: number,
+    durationMs: number,
+    { offsetMs = 0, keepFrom = round }: { offsetMs?: number; keepFrom?: number } = {},
+  ): Promise<void> {
+    this.releaseBefore(keepFrom);
     const track = this.tracks.get(round);
     this.snippetToken++;
     const token = this.snippetToken;
     if (!track) return Promise.resolve();
+    // Un seul extrait à la fois : celui d'une autre manche s'arrête.
+    for (const other of this.tracks.values()) if (other !== track) other.element.pause();
     const { element } = track;
     const endAt = track.startTime + durationMs / 1000;
-    const giveUpAt = performance.now() + durationMs + SNIPPET_STALL_MS;
-    element.currentTime = track.startTime;
+    const giveUpAt = performance.now() + durationMs - offsetMs + SNIPPET_STALL_MS;
+    element.currentTime = track.startTime + Math.max(0, offsetMs) / 1000;
     element.volume = this.volume;
     void element.play().catch(this.handlePlayError);
 

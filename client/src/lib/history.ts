@@ -17,7 +17,9 @@ export function settingsKey(settings: GameSettings): string {
   const { mode, rounds, filters } = settings;
   const types = [...filters.types].sort().join('+');
   const years = `${filters.yearFrom ?? ''}-${filters.yearTo ?? ''}`;
-  return `${mode}|${rounds}|${filters.popularity}|${types}|${years}`;
+  // Plus ou moins : pas de manches (la partie dure jusqu'à l'erreur).
+  const length = mode === 'higherLower' ? '-' : rounds;
+  return `${mode}|${length}|${filters.popularity}|${types}|${years}`;
 }
 
 export function readHistory(): PlayedGame[] {

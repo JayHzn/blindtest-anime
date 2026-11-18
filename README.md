@@ -10,8 +10,8 @@ Le blindtest des openings et endings d'anime, à jouer seul ou entre potes.
 
 ### Réglages
 
-- **Mode** : Classique ou Progressif, et en room Playlist des joueurs ou Enchères (voir plus bas).
-- **Manches** : 5, 10, 15 ou 20 (en Playlist des joueurs : nombre de chansons par joueur, de 1 à 10).
+- **Mode** : Classique, Progressif ou Plus ou moins, et en room Playlist des joueurs ou Enchères (voir plus bas).
+- **Manches** : 5, 10, 15 ou 20 (en Playlist des joueurs : nombre de chansons par joueur, de 1 à 10 ; pas de manches en Plus ou moins).
 - **Popularité** : Top 100, Top 500, Top 2000 ou tout le catalogue (selon le nombre de fans sur AniList).
 - **Types** : openings, endings, ou les deux.
 - **Années** : toutes, avant 2000, 2000–2009, 2010–2019 ou 2020+.
@@ -43,6 +43,20 @@ L'extrait s'allonge à chaque palier, et chaque palier rapporte moins :
 - **3 essais par palier** : après 3 erreurs, tu passes automatiquement au palier suivant.
 - Au dernier palier, 3 erreurs ou un clic sur **« Abandonner »** : manche perdue (0 point).
 - 60 secondes au total par manche.
+
+### Plus ou moins
+
+La chanson vient-elle d'un anime **plus ou moins populaire** ? La popularité, c'est le nombre de membres AniList de l'anime. Pas de nom à taper : il suffit de choisir.
+
+1. **Tour 1** : deux chansons inconnues, A puis B (10 secondes chacune). Laquelle vient de l'anime le plus populaire ? Tu peux choisir dès que B commence, et tu as encore 10 secondes après la fin de B.
+2. **Tours suivants** : la chanson du tour précédent devient la **référence**, affichée en clair (jaquette, titre, nombre de membres). Une nouvelle chanson se joue 10 secondes : plus ou moins populaire que la référence ? Encore 10 secondes pour choisir après l'extrait.
+3. Tu peux **réécouter** les deux chansons autant que tu veux pendant le tour. Ton choix est **définitif**.
+4. **Révélation** (6 secondes) : les deux jaquettes, les nombres de membres et l'écart entre les deux (ex. « ×2,3 »).
+
+- **Une erreur, ou pas de réponse à temps : éliminé.** En solo, la série s'arrête ; ton score est la longueur de ta série.
+- L'écart entre les deux animes se resserre au fil des tours : au moins ×1,5 (tours 1 à 3), entre ×1,3 et ×3 (4 à 6), entre ×1,2 et ×2 (7 à 9), puis entre ×1,1 et ×1,5.
+- 30 tours au plus. Jamais deux fois la même série dans une partie.
+- **À plusieurs** : tu vois qui a répondu, jamais quoi. Si tout le monde se trompe au même tour, personne n'est éliminé. Les éliminés regardent la suite (son et révélations) sans répondre. Le dernier encore en jeu gagne ; après 30 tours, ceux qui restent finissent ex æquo. Classement : selon le tour d'élimination, puis le nombre de bonnes réponses.
 
 ### Playlist des joueurs (à partir de 3 joueurs)
 
@@ -96,4 +110,6 @@ Combien de temps te faut-il pour reconnaître la chanson ? Le plus audacieux ten
 
 ## En solo
 
-À la fin de chaque partie, ton score est comparé à ton record pour les mêmes réglages.
+À la fin de chaque partie, ton score est comparé à ton record pour les mêmes réglages (en Plus ou moins : ta plus longue série).
+
+En Plus ou moins, l'écran de fin montre aussi l'erreur qui a arrêté ta série et toute la chaîne jouée.

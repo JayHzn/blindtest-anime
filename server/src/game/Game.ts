@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   BONUS_POINTS,
+  HIGHER_LOWER,
   MODE_TIMINGS,
   INITIAL_PROGRESS,
   PLAYLIST,
@@ -8,12 +9,22 @@ import {
   PROGRESSIVE_LAST_TIER,
   chooserPoints,
   classicPoints,
+  compareHigherLower,
+  firstRound,
+  higherLowerListenMs,
+  pickOpensAfterMs,
+  popularityRatio,
+  ratioWindow,
   type AnswerPayload,
   type AnswerResult,
   type GameEndReason,
   type GamePhase,
   type GameSettings,
   type GameSnapshot,
+  type HigherLowerCard,
+  type HigherLowerPick,
+  type HigherLowerReveal,
+  type HigherLowerView,
   type LocalizedTitle,
   type ModeTiming,
   type PlayerRoundResult,
@@ -90,6 +101,8 @@ interface RoundState {
   guessWindowEndsAt: number | null;
   /** Mode Enchères : annonces, ordre de passage et réponses (créé à la fin du compte à rebours). */
   auction: AuctionRound | null;
+  /** Plus ou moins : choix définitifs des joueurs encore en jeu. */
+  picks: Map<string, HigherLowerPick>;
 }
 
 export interface GameOptions {
@@ -145,6 +158,10 @@ export class Game {
   /** Manches dont l'audio a déjà été envoyé (pour les joueurs qui arrivent en cours de route). */
   private readonly preparedRounds = new Set<number>();
   private lastReveal: RoundReveal | null = null;
+  /** Plus ou moins : tour d'élimination de chaque joueur (0 : arrivé en cours de partie). */
+  private readonly eliminatedAt = new Map<string, number>();
+  /** Joueurs au lancement (en Plus ou moins, à plusieurs, le dernier en jeu gagne). */
+  private startingPlayers = 0;
   private started = false;
   private closed = false;
 
@@ -160,7 +177,11 @@ export class Game {
     this.introMs = options.introMs ?? this.timing.countdownMs;
     this.audioWaitMs = options.audioWaitMs ?? AUDIO_WAIT_MS;
 
-    const wanted = options.choosers?.length ?? options.settings.rounds;
+    // Plus ou moins : toute la chaîne tirée est jouable (la partie s'arrête à l'élimination).
+    const wanted =
+      options.settings.mode === 'higherLower'
+        ? options.themes.length
+        : (options.choosers?.length ?? options.settings.rounds);
     const total = Math.min(wanted, options.themes.length);
     this.rounds = options.themes
       .slice(0, total)
@@ -169,7 +190,8 @@ export class Game {
   }
 
   get totalRounds(): number {
-    return this.rounds.length;
+    // Plus ou moins : la chanson 0 n'est que la première référence.
+    return this.isHigherLower ? Math.max(0, this.rounds.length - 1) : this.rounds.length;
   }
 
   get currentPhase(): GamePhase {
@@ -192,6 +214,8 @@ export class Game {
     }
     this.players.set(id, { id, pseudo, score: 0, connected: true, ready: new Map() });
     this.pseudos.set(id, pseudo);
+    // Plus ou moins : qui arrive en cours de partie regarde (il n'a pas joué les tours précédents).
+    if (this.started && this.isHigherLower) this.eliminatedAt.set(id, 0);
     if (this.started) {
       this.syncPlayer(id);
       this.broadcastPlayers();
@@ -257,13 +281,16 @@ export class Game {
   start(): void {
     if (this.started || this.closed) return;
     this.started = true;
+    this.startingPlayers = this.players.size;
     // Chacun reçoit l'état initial (joueurs, nombre de manches) avant la première manche.
     for (const id of this.players.keys())
       this.emitter.toPlayer(id, 'game:state', this.snapshot(id));
-    // Les chansons 1 et 2 se chargent pendant le compte à rebours / l'écran d'intro.
+    // Les chansons 1 et 2 se chargent pendant le compte à rebours / l'écran d'intro
+    // (Plus ou moins : A et B du tour 1, et la chanson du tour 2).
     this.emitPrepare(0);
     this.emitPrepare(1);
-    this.enterCountdown(0);
+    if (this.isHigherLower) this.emitPrepare(2);
+    this.enterCountdown(firstRound(this.settings.mode));
   }
 
   snapshot(forPlayer: string): GameSnapshot {
@@ -286,6 +313,38 @@ export class Game {
         round?.auction && this.phase !== 'reveal' && this.phase !== 'finished'
           ? round.auction.view(forPlayer)
           : null,
+      higherLower: this.isHigherLower && round ? this.higherLowerView(round, forPlayer) : null,
+    };
+  }
+
+  /** Plus ou moins : tour en cours vu par un joueur (référence en clair, écart, son choix). */
+  private higherLowerView(round: RoundState, playerId: string): HigherLowerView {
+    const tour = this.roundIndex;
+    const reference = tour > 1 ? this.rounds[tour - 1] : undefined;
+    return {
+      tour,
+      reference: reference ? this.higherLowerCard(reference.theme) : null,
+      window: ratioWindow(tour),
+      yourPick: round.picks.get(playerId) ?? null,
+    };
+  }
+
+  private higherLowerCard(theme: ThemeRow): HigherLowerCard {
+    const anime = this.catalogue.getAnime(theme.animeId)!;
+    return {
+      title: {
+        fr: this.catalogue.animeTitle(anime, 'fr'),
+        en: this.catalogue.animeTitle(anime, 'en'),
+      },
+      romaji: anime.titleRomaji ?? anime.name,
+      year: anime.year,
+      coverUrl: anime.coverUrl,
+      coverColor: anime.coverColor,
+      type: theme.type,
+      sequence: theme.sequence,
+      song: theme.songTitle,
+      artists: theme.artists,
+      popularity: anime.popularity,
     };
   }
 
@@ -308,23 +367,25 @@ export class Game {
       if (round === this.roundIndex) this.rounds[round]!.auction?.audioReady(playerId);
       return;
     }
-    if (this.waitingForAudio && round === this.roundIndex && this.everyoneReady()) {
+    if (!this.roundAudio().includes(round)) return;
+    if (this.waitingForAudio && this.everyoneReady()) {
       this.startListening();
       return;
     }
     // Retardataire : l'écoute a commencé sans lui ; il démarre maintenant, avec tout son temps.
+    // (Plus ou moins : les éliminés écoutent aussi, en spectateurs.)
     const current = this.rounds[this.roundIndex]!;
     if (
       this.phase === 'listening' &&
-      round === this.roundIndex &&
-      current.participants.has(playerId) &&
-      !current.starts.has(playerId)
+      (current.participants.has(playerId) || this.isHigherLower) &&
+      !current.starts.has(playerId) &&
+      this.isPlayerReady(player)
     ) {
       this.startPlayer(current, playerId, Date.now());
-      const deadline = Date.now() + this.timing.listenMs;
+      const deadline = Date.now() + this.listenMs;
       if (deadline > this.phaseEndsAt) {
         this.phaseEndsAt = deadline;
-        this.schedule(this.timing.listenMs, () => this.endRound());
+        this.schedule(this.listenMs, () => this.endRound());
       }
     }
   }
@@ -333,9 +394,14 @@ export class Game {
   audioFailed(playerId: string, round: number, url: string): void {
     const target = this.rounds[round];
     if (!this.players.has(playerId) || !target || url !== audioPath(target.token)) return;
+    // Plus ou moins : la chanson A (0) n'est jouée qu'au tour 1.
     const notStartedYet =
-      round > this.roundIndex || (round === this.roundIndex && this.phase === 'countdown');
+      round > this.roundIndex || (this.phase === 'countdown' && this.roundAudio().includes(round));
     if (!notStartedYet) return;
+    if (this.isHigherLower) {
+      this.replaceHigherLowerSong(round);
+      return;
+    }
 
     const replacement = this.spares.shift();
     this.media.revoke(target.token);
@@ -352,6 +418,8 @@ export class Game {
     const player = this.players.get(playerId);
     if (!player || !player.connected) return { accepted: false, reason: 'not_in_game' };
     const round = this.rounds[this.roundIndex]!;
+    // Plus ou moins : pas de réponse tapée, seulement un choix (voir `pick`).
+    if (this.isHigherLower) return { accepted: false, reason: 'not_listening' };
     // Enchères : seul celui qui a la main répond, une fois (arbitrage dans AuctionRound).
     if (this.isAuction) {
       return (
@@ -366,7 +434,7 @@ export class Game {
     if (
       this.phase !== 'listening' ||
       startedAt === undefined ||
-      Date.now() > startedAt + this.timing.listenMs
+      Date.now() > startedAt + this.listenMs
     ) {
       return { accepted: false, reason: 'not_listening' };
     }
@@ -393,7 +461,7 @@ export class Game {
 
     const basePoints = progress
       ? PROGRESSIVE.tierPoints[progress.tier]!
-      : classicPoints(elapsedMs, this.timing.listenMs);
+      : classicPoints(elapsedMs, this.listenMs);
     const points =
       basePoints +
       (verdict.seasonExact ? BONUS_POINTS : 0) +
@@ -469,6 +537,26 @@ export class Game {
     return true;
   }
 
+  /**
+   * Plus ou moins : choix définitif d'un joueur encore en jeu, dès que la nouvelle
+   * chanson commence (au tour 1 : quand B commence) et jusqu'à la fin de son temps.
+   */
+  pick(playerId: string, pick: HigherLowerPick): boolean {
+    const round = this.rounds[this.roundIndex];
+    if (!this.isHigherLower || this.phase !== 'listening' || !round) return false;
+    if (!this.players.get(playerId)?.connected || !round.participants.has(playerId)) return false;
+    const startedAt = round.starts.get(playerId);
+    if (startedAt === undefined || round.picks.has(playerId)) return false;
+    const now = Date.now();
+    const opensAt = startedAt + pickOpensAfterMs(this.roundIndex) - HIGHER_LOWER.pickToleranceMs;
+    if (now < opensAt || now > startedAt + this.listenMs) return false;
+    round.picks.set(playerId, pick);
+    // Tout le monde voit qui a répondu, jamais quoi.
+    this.broadcast('player:found', { playerId, players: this.scoreboard() });
+    if (this.everyoneDone()) this.schedule(0, () => this.endRound());
+    return true;
+  }
+
   /** Enchères : annonce secrète d'un joueur pendant la phase d'annonce. */
   bid(playerId: string, bid: number): boolean {
     const round = this.rounds[this.roundIndex];
@@ -541,6 +629,27 @@ export class Game {
     return this.settings.mode === 'auction';
   }
 
+  private get isHigherLower(): boolean {
+    return this.settings.mode === 'higherLower';
+  }
+
+  /** Temps d'écoute et de réponse de la manche en cours (Plus ou moins : 30 s au tour 1). */
+  private get listenMs(): number {
+    return this.isHigherLower ? higherLowerListenMs(this.roundIndex) : this.timing.listenMs;
+  }
+
+  /** Audios joués pendant la manche en cours (Plus ou moins, tour 1 : A et B). */
+  private roundAudio(): number[] {
+    return this.isHigherLower && this.roundIndex === 1 ? [0, 1] : [this.roundIndex];
+  }
+
+  private isPlayerReady(player: PlayerState): boolean {
+    return this.roundAudio().every((index) => {
+      const round = this.rounds[index];
+      return round !== undefined && player.ready.get(index) === audioPath(round.token);
+    });
+  }
+
   private progressOf(round: RoundState, playerId: string): TierProgress {
     let progress = round.progress.get(playerId);
     if (!progress) {
@@ -579,7 +688,8 @@ export class Game {
     this.phase = 'countdown';
     this.waitingForAudio = false;
     // Première manche : écran d'intro (plus long en room) pendant que les chansons 1 et 2 chargent.
-    const duration = index === 0 ? this.introMs : this.timing.countdownMs;
+    const duration =
+      index === firstRound(this.settings.mode) ? this.introMs : this.timing.countdownMs;
     this.phaseEndsAt = Date.now() + duration;
     this.broadcast('round:countdown', { round: index, phaseEndsAt: this.phaseEndsAt });
     this.schedule(duration, () => this.afterCountdown());
@@ -605,20 +715,21 @@ export class Game {
     this.waitingForAudio = false;
     this.phase = 'listening';
     round.listenStartedAt = now;
-    this.phaseEndsAt = now + this.timing.listenMs;
-    // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque.
-    if (round.theme.videoUrl && !round.videoToken) {
+    this.phaseEndsAt = now + this.listenMs;
+    // La vidéo de révélation se précharge pendant l'écoute, derrière une URL opaque
+    // (Plus ou moins : révélation sans vidéo, avec les jaquettes).
+    if (round.theme.videoUrl && !round.videoToken && !this.isHigherLower) {
       round.videoToken = this.media.register(round.theme.videoUrl, 'video');
     }
     // Les joueurs dont le son est prêt démarrent ensemble ; les autres dès qu'il le sera.
-    const url = audioPath(round.token);
     for (const player of this.connectedPlayers()) {
-      round.participants.add(player.id);
-      if (player.ready.get(this.roundIndex) === url) this.startPlayer(round, player.id, now);
+      // Plus ou moins : les éliminés écoutent sans répondre.
+      if (!this.eliminatedAt.has(player.id)) round.participants.add(player.id);
+      if (this.isPlayerReady(player)) this.startPlayer(round, player.id, now);
     }
     // Préchargement de la manche suivante pendant l'écoute.
     if (!this.preparedRounds.has(this.roundIndex + 1)) this.emitPrepare(this.roundIndex + 1);
-    this.schedule(this.timing.listenMs, () => this.endRound());
+    this.schedule(this.listenMs, () => this.endRound());
   }
 
   /**
@@ -700,23 +811,29 @@ export class Game {
     this.emitter.toPlayer(playerId, 'round:start', {
       round: this.roundIndex,
       startedAt,
-      phaseEndsAt: startedAt + this.timing.listenMs,
+      phaseEndsAt: startedAt + this.listenMs,
       videoUrl: round.videoToken ? videoPath(round.videoToken) : null,
       ...(this.isPlaylist && { ownSong: round.choosers.includes(playerId) }),
+      ...(this.isHigherLower && { higherLower: this.higherLowerView(round, playerId) }),
     });
   }
 
   private endRound(): void {
     const round = this.rounds[this.roundIndex]!;
     const playlist = this.isPlaylist ? this.settlePlaylist(round) : undefined;
+    const higherLower = this.isHigherLower ? this.settleHigherLower(round) : undefined;
     this.phase = 'reveal';
     this.phaseEndsAt = Date.now() + this.timing.revealMs;
     this.lastReveal = this.buildReveal();
     if (playlist) this.lastReveal.playlist = playlist;
+    if (higherLower) this.lastReveal.higherLower = higherLower;
     this.broadcast('round:reveal', this.lastReveal);
     this.schedule(this.timing.revealMs, () => {
-      if (this.roundIndex + 1 < this.totalRounds) this.enterCountdown(this.roundIndex + 1);
-      else this.finish('completed');
+      if (!higherLower?.gameOver && this.roundIndex + 1 < this.rounds.length) {
+        this.enterCountdown(this.roundIndex + 1);
+      } else {
+        this.finish('completed');
+      }
     });
   }
 
@@ -728,13 +845,98 @@ export class Game {
   }
 
   private handleNoReplacement(round: number): void {
-    if (round === 0) {
+    // Plus ou moins : sans A ou B, pas de tour 1.
+    if (round === 0 || (this.isHigherLower && round <= 1)) {
       this.finish('audio_unavailable');
       return;
     }
     // Plus de musique de rechange : la partie s'arrête avant la manche injouable.
     for (const removed of this.rounds.splice(round)) this.revokeRound(removed);
     if (round === this.roundIndex) this.finish('completed');
+  }
+
+  /**
+   * Plus ou moins : un audio injouable (pas encore joué) est remplacé en retirant la
+   * suite de la chaîne à partir de lui, pour que chaque écart reste respecté.
+   */
+  private replaceHigherLowerSong(index: number): void {
+    const failed = this.rounds[index]!;
+    const exclude = new Set<number>();
+    const franchise = this.catalogue.franchiseOfTheme(failed.theme.id);
+    if (franchise !== undefined) exclude.add(franchise);
+    const chain = this.catalogue.higherLowerChain(
+      this.settings.filters,
+      HIGHER_LOWER.maxTours + 1,
+      this.random,
+      this.rounds.slice(0, index).map((round) => round.theme),
+      exclude,
+    );
+    for (const removed of this.rounds.splice(index)) this.revokeRound(removed);
+    for (const theme of chain.slice(index)) this.rounds.push(this.createRound(theme));
+    for (const player of this.players.values()) {
+      for (const key of [...player.ready.keys()]) if (key >= index) player.ready.delete(key);
+    }
+    for (const prepared of [...this.preparedRounds].sort((a, b) => a - b)) {
+      if (prepared < index) continue;
+      if (this.rounds[prepared]) this.emitPrepare(prepared);
+      else this.preparedRounds.delete(prepared);
+    }
+    if (this.rounds.length <= index) this.handleNoReplacement(index);
+  }
+
+  /**
+   * Plus ou moins : résultat du tour, compté à la révélation.
+   * - bonne réponse : +1 (le score compte les bonnes réponses) ;
+   * - erreur ou silence : éliminé, sauf si tous les joueurs encore en jeu se sont trompés ;
+   * - fin de partie : plus personne en jeu, un seul à plusieurs, ou dernier tour.
+   */
+  private settleHigherLower(round: RoundState): HigherLowerReveal {
+    const tour = this.roundIndex;
+    const reference = this.higherLowerCard(this.rounds[tour - 1]!.theme);
+    const challenger = this.higherLowerCard(round.theme);
+    const answer: HigherLowerPick =
+      challenger.popularity > reference.popularity ? 'higher' : 'lower';
+    const alive = [...this.players.keys()].filter((id) => !this.eliminatedAt.has(id));
+    const picks = alive.map((playerId) => {
+      const pick = round.picks.get(playerId) ?? null;
+      return { playerId, pick, correct: pick === answer };
+    });
+    const wrong = picks.filter((entry) => !entry.correct).map((entry) => entry.playerId);
+    const allWrong = alive.length >= 2 && wrong.length === alive.length;
+    const eliminated = allWrong ? [] : wrong;
+
+    for (const { playerId, pick, correct } of picks) {
+      const player = this.players.get(playerId)!;
+      if (correct) player.score += 1;
+      round.results.set(playerId, {
+        playerId,
+        correct,
+        points: correct ? 1 : 0,
+        elapsedMs: null,
+        seasonExact: false,
+        sequenceExact: false,
+        tier: null,
+        higherLower: { pick },
+      });
+    }
+    for (const id of eliminated) this.eliminatedAt.set(id, tour);
+
+    const remaining = alive.length - eliminated.length;
+    const gameOver =
+      remaining === 0 ||
+      (this.startingPlayers >= 2 && remaining <= 1) ||
+      tour + 1 >= this.rounds.length;
+    return {
+      tour,
+      reference,
+      challenger,
+      ratio: Math.round(popularityRatio(reference.popularity, challenger.popularity) * 100) / 100,
+      answer,
+      picks,
+      eliminated,
+      allWrong,
+      gameOver,
+    };
   }
 
   /**
@@ -808,6 +1010,7 @@ export class Game {
       guesses: new Map(),
       guessWindowEndsAt: null,
       auction: null,
+      picks: new Map(),
     };
   }
 
@@ -884,9 +1087,11 @@ export class Game {
   /** État, audio déjà annoncé et révélation en cours, pour un joueur qui (re)arrive. */
   private syncPlayer(id: string): void {
     this.emitter.toPlayer(id, 'game:state', this.snapshot(id));
+    // Plus ou moins : la référence du tour (chanson précédente) reste réécoutable.
+    const from = this.isHigherLower ? this.roundIndex - 1 : this.roundIndex;
     for (const index of [...this.preparedRounds].sort((a, b) => a - b)) {
       const round = this.rounds[index];
-      if (index < this.roundIndex || !round) continue;
+      if (index < from || !round) continue;
       this.emitter.toPlayer(id, 'round:prepare', {
         round: index,
         url: audioPath(round.token),
@@ -924,20 +1129,26 @@ export class Game {
       this.isPlaylist &&
       (this.phase === 'countdown' || this.phase === 'listening') &&
       !(forPlayer && round?.choosers.includes(forPlayer));
-    return [...this.players.values()]
-      .map((player) => ({
+    const players = [...this.players.values()].map((player): PlayerScore => {
+      const eliminatedAt = this.eliminatedAt.get(player.id);
+      return {
         id: player.id,
         pseudo: player.pseudo,
         score: player.score,
         // Sa propre coche n'a rien de secret (et sert à la reconnexion).
+        // Plus ou moins : la coche indique qui a répondu au tour, jamais quoi.
         found:
           (!hideFound || player.id === forPlayer) &&
           (round?.auction
             ? round.auction.hasFound(player.id)
-            : (round?.results.get(player.id)?.correct ?? false)),
+            : this.isHigherLower
+              ? (round?.picks.has(player.id) ?? false)
+              : (round?.results.get(player.id)?.correct ?? false)),
         connected: player.connected,
-      }))
-      .sort((a, b) => b.score - a.score);
+        ...(eliminatedAt !== undefined && { eliminatedAt }),
+      };
+    });
+    return players.sort(this.isHigherLower ? compareHigherLower : (a, b) => b.score - a.score);
   }
 
   private connectedPlayers(): PlayerState[] {
@@ -945,13 +1156,13 @@ export class Game {
   }
 
   private everyoneReady(): boolean {
-    const url = audioPath(this.rounds[this.roundIndex]!.token);
-    return this.connectedPlayers().every((player) => player.ready.get(this.roundIndex) === url);
+    return this.connectedPlayers().every((player) => this.isPlayerReady(player));
   }
 
   /**
-   * Tous les participants connectés ont trouvé (ou sont éliminés, en Progressif).
-   * En Playlist, qui a choisi la chanson ne répond pas : il n'est pas attendu.
+   * Tous les participants connectés ont trouvé (ou sont éliminés, en Progressif ;
+   * ont choisi, en Plus ou moins). En Playlist, qui a choisi la chanson ne répond
+   * pas : il n'est pas attendu.
    */
   private everyoneDone(): boolean {
     const round = this.rounds[this.roundIndex]!;
@@ -959,7 +1170,9 @@ export class Game {
       .filter((player) => round.participants.has(player.id) && !round.choosers.includes(player.id))
       .every(
         (player) =>
-          round.results.get(player.id)?.correct || round.progress.get(player.id)?.eliminated,
+          round.results.get(player.id)?.correct ||
+          round.progress.get(player.id)?.eliminated ||
+          round.picks.has(player.id),
       );
   }
 

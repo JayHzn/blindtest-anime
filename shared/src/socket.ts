@@ -20,6 +20,7 @@ import type {
   StartGameError,
   TierProgress,
 } from './game';
+import type { HigherLowerPick, HigherLowerView } from './higherLower';
 import type { PlaylistPickResponse, PlaylistPreview, PlaylistSongsResponse } from './playlist';
 import type { RoomError, RoomResponse, RoomState } from './room';
 
@@ -47,6 +48,8 @@ export interface ServerToClientEvents {
     videoUrl: string | null;
     /** Playlist : le joueur a choisi cette chanson (il écoute sans répondre). */
     ownSong?: boolean;
+    /** Plus ou moins : tour vu par le joueur (référence, écart). */
+    higherLower?: HigherLowerView;
   }) => void;
   /** Liste des joueurs mise à jour (arrivée, départ, déconnexion, retour). */
   'game:players': (players: PlayerScore[]) => void;
@@ -90,6 +93,8 @@ export interface ClientToServerEvents {
   'auction:bid': (payload: { bid: number }, ack: (ok: boolean) => void) => void;
   /** Enchères : celui qui a la main réécoute l'extrait ; renvoie les réécoutes restantes (null : refusé). */
   'auction:replay': (ack: (left: number | null) => void) => void;
+  /** Plus ou moins : choix définitif pour la nouvelle chanson (false : refusé). */
+  'higherLower:pick': (payload: { pick: HigherLowerPick }, ack: (ok: boolean) => void) => void;
   /** Quitte la partie en cours (solo). */
   'game:leave': () => void;
   /** L'audio de la manche (`url` reçue dans `round:prepare`) est préchargé et prêt à jouer. */

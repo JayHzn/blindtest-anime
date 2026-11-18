@@ -1,9 +1,15 @@
-import { MODE_TIMINGS, PLAYLIST, chooserPoints } from '@blindtest/shared';
+import { MODE_TIMINGS, PLAYLIST, chooserPoints, firstRound } from '@blindtest/shared';
 import { AppHeader } from '../components/AppHeader';
 import { Vinyl } from '../components/Vinyl';
 import { AnswerForm } from '../components/game/AnswerForm';
 import { AuctionStage } from '../components/game/AuctionStage';
 import { GameSidebar } from '../components/game/GameSidebar';
+import {
+  HigherLowerReveal,
+  HigherLowerSidebar,
+  HigherLowerStage,
+  StreakPill,
+} from '../components/game/HigherLower';
 import { RevealPanel } from '../components/game/RevealPanel';
 import { RoundDots } from '../components/game/RoundDots';
 import { TierControls } from '../components/game/TierControls';
@@ -32,6 +38,7 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
   const now = useServerNow();
   const { phase } = state;
   const auctionMode = state.settings.mode === 'auction';
+  const higherLowerMode = state.settings.mode === 'higherLower';
 
   const quit = () => {
     if (window.confirm(t('game.quit.confirm'))) onQuit();
@@ -41,18 +48,28 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
     <div className={styles.page}>
       <AppHeader
         center={
-          <>
-            <RoundDots
-              total={state.totalRounds}
-              current={state.round}
-              history={state.history}
-              you={state.you}
-            />
-            <span className={styles.roundPill}>
-              {t(`setup.mode.${state.settings.mode}`)} ·{' '}
-              {t('game.round', { n: state.round + 1, total: state.totalRounds })}
-            </span>
-          </>
+          higherLowerMode ? (
+            // Plus ou moins : pas de nombre de manches fixe, mais une série.
+            <>
+              <span className={styles.roundPill}>
+                {t('setup.mode.higherLower')} · {t('hl.tour', { n: state.round })}
+              </span>
+              <StreakPill state={state} />
+            </>
+          ) : (
+            <>
+              <RoundDots
+                total={state.totalRounds}
+                current={state.round}
+                history={state.history}
+                you={state.you}
+              />
+              <span className={styles.roundPill}>
+                {t(`setup.mode.${state.settings.mode}`)} ·{' '}
+                {t('game.round', { n: state.round + 1, total: state.totalRounds })}
+              </span>
+            </>
+          )
         }
       >
         <VolumeControl volume={volume} onChange={onVolumeChange} />
@@ -79,10 +96,16 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
           (phase === 'bidding' || phase === 'listening' || phase === 'answering') ? (
             <AuctionStage session={session} state={state} now={now} />
           ) : null}
-          {!auctionMode && phase === 'listening' ? (
+          {higherLowerMode && phase === 'listening' ? (
+            <HigherLowerStage session={session} state={state} now={now} />
+          ) : null}
+          {!auctionMode && !higherLowerMode && phase === 'listening' ? (
             <ListeningStage session={session} state={state} now={now} />
           ) : null}
-          {phase === 'reveal' && state.reveal ? (
+          {higherLowerMode && phase === 'reveal' && state.reveal ? (
+            <HigherLowerReveal reveal={state.reveal} you={state.you} now={now} />
+          ) : null}
+          {!higherLowerMode && phase === 'reveal' && state.reveal ? (
             <RevealPanel
               key={state.reveal.round}
               reveal={state.reveal}
@@ -93,20 +116,24 @@ export function Game({ session, volume, onVolumeChange, onQuit }: GameProps) {
           ) : null}
         </main>
 
-        <GameSidebar
-          players={state.players}
-          you={state.you}
-          history={state.history}
-          badges={
-            auctionMode && state.auction && phase !== 'reveal'
-              ? auctionBadges(
-                  state.auction,
-                  state.players.map((player) => player.id),
-                  t,
-                )
-              : undefined
-          }
-        />
+        {higherLowerMode ? (
+          <HigherLowerSidebar state={state} now={now} />
+        ) : (
+          <GameSidebar
+            players={state.players}
+            you={state.you}
+            history={state.history}
+            badges={
+              auctionMode && state.auction && phase !== 'reveal'
+                ? auctionBadges(
+                    state.auction,
+                    state.players.map((player) => player.id),
+                    t,
+                  )
+                : undefined
+            }
+          />
+        )}
       </div>
     </div>
   );
@@ -116,12 +143,19 @@ function CountdownStage({ state, now }: { state: SessionState; now: number }) {
   const { t } = useI18n();
   const seconds = secondsLeft(state.phaseEndsAt, now);
   // Room : écran d'intro avant la première manche (mode, manches, joueurs, puis 3-2-1).
-  if (state.kind === 'room' && state.round === 0 && now < state.phaseEndsAt) {
+  if (
+    state.kind === 'room' &&
+    state.round === firstRound(state.settings.mode) &&
+    now < state.phaseEndsAt
+  ) {
     return (
       <div className={styles.intro}>
         <h1 className={styles.introTitle}>{t('intro.title')}</h1>
         <p className={styles.introMeta}>
-          {t(`setup.mode.${state.settings.mode}`)} · {t('intro.rounds', { n: state.totalRounds })}
+          {t(`setup.mode.${state.settings.mode}`)} ·{' '}
+          {state.settings.mode === 'higherLower'
+            ? t('intro.higherLower')
+            : t('intro.rounds', { n: state.totalRounds })}
         </p>
         <ul className={styles.introPlayers}>
           {state.players.map((player, i) => (

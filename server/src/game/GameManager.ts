@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  HIGHER_LOWER,
   minPlayers,
   sanitizeSettings,
   type GameSettings,
@@ -73,6 +74,10 @@ export class GameManager {
       // Remplaçantes (audio injouable) : tirées avec les filtres de la room, hors séries déjà jouées.
       const used = new Set(themes.map((theme) => this.catalogue!.franchiseOfTheme(theme.id)!));
       themes.push(...this.catalogue.pickThemes(settings.filters, SPARE_THEMES, Math.random, used));
+    } else if (settings.mode === 'higherLower') {
+      // Chaîne complète tirée d'avance (la chanson 0 est la première référence).
+      themes = this.catalogue.higherLowerChain(settings.filters, HIGHER_LOWER.maxTours + 1);
+      if (themes.length < 2) return { ok: false, error: 'not_enough_themes' };
     } else {
       themes = this.catalogue.pickThemes(settings.filters, settings.rounds + SPARE_THEMES);
     }

@@ -58,6 +58,7 @@ export function SettingsForm({
 }: SettingsFormProps) {
   const { t } = useI18n();
   const playlist = settings.mode === 'playlist';
+  const higherLower = settings.mode === 'higherLower';
   const songsPerPlayer = settings.songsPerPlayer ?? PLAYLIST.songsDefault;
 
   const updateFilters = (patch: Partial<GameSettings['filters']>) =>
@@ -121,6 +122,9 @@ export function SettingsForm({
             onToggle={(value) => !disabled && onChange({ ...settings, songsPerPlayer: value })}
           />
         </section>
+      ) : higherLower ? (
+        // Plus ou moins : la partie dure jusqu'à l'erreur, pas de réglage de manches.
+        <p className={styles.note}>{t('setup.higherLower.note')}</p>
       ) : (
         <section className={styles.section}>
           <h2 className={styles.label}>{t('setup.rounds')}</h2>

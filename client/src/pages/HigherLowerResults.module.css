@@ -1,0 +1,107 @@
+/* Fin de partie Plus ou moins (série solo, classement par élimination). */
+
+.mistake {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.mistakeTitle {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 18px;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pairSide {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.pairSide strong {
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pairRatio {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-3);
+  color: var(--color-peach);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.said {
+  margin: 0;
+  font-weight: 700;
+}
+
+.ranking {
+  width: 100%;
+  margin-top: var(--space-3);
+  text-align: left;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-bg);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.right {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.facts {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.start {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.missed {
+  outline: 2px solid var(--color-danger);
+  outline-offset: -2px;
+}

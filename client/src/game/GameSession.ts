@@ -1,9 +1,12 @@
 import {
+  HIGHER_LOWER,
   INITIAL_PROGRESS,
   MODE_TIMINGS,
   PROGRESSIVE,
   type AnswerPayload,
   type AuctionView,
+  type HigherLowerPick,
+  type HigherLowerView,
   type GameEnd,
   type GamePhase,
   type GameSnapshot,
@@ -80,6 +83,10 @@ export interface SessionState {
   playlist: PlaylistState;
   /** Mode Enchères : manche en cours (annonces, ordre de passage, extrait programmé). */
   auction: AuctionView | null;
+  /** Mode Plus ou moins : tour en cours (référence, écart, choix envoyé). */
+  higherLower: HigherLowerView | null;
+  /** Mode Plus ou moins : extrait en cours de lecture (index de la chanson, fin en heure serveur). */
+  clip: { index: number; endsAt: number } | null;
   /** Le navigateur a bloqué le son (pas de clic depuis le chargement de la page). */
   soundBlocked: boolean;
   end: GameEnd | null;
@@ -109,6 +116,8 @@ export class GameSession {
   /** Enchères : extrait déjà programmé (« manche:tour »), et sa minuterie. */
   private scheduledSnippet: string | null = null;
   private snippetTimer: number | null = null;
+  /** Plus ou moins : extraits programmés du tour (A puis B, ou la nouvelle chanson). */
+  private clipTimers: number[] = [];
   private disposed = false;
 
   constructor(
@@ -135,6 +144,8 @@ export class GameSession {
       snippetPlaying: false,
       playlist: NO_PLAYLIST,
       auction: null,
+      higherLower: null,
+      clip: null,
       soundBlocked: false,
       end: null,
       previousBest: null,
@@ -144,8 +155,10 @@ export class GameSession {
       'game:state': (snapshot) => this.onSnapshot(snapshot),
       'round:prepare': (audio) => this.onPrepare(audio),
       'round:countdown': ({ round, phaseEndsAt }) => this.onCountdown(round, phaseEndsAt),
-      'round:start': ({ round, startedAt, phaseEndsAt, videoUrl, ownSong }) =>
-        this.onStart(round, startedAt, phaseEndsAt, videoUrl, ownSong ?? false),
+      'round:start': ({ round, startedAt, phaseEndsAt, videoUrl, ownSong, higherLower }) => {
+        if (higherLower) this.update({ higherLower });
+        this.onStart(round, startedAt, phaseEndsAt, videoUrl, ownSong ?? false);
+      },
       'player:found': ({ players }) => this.update({ players }),
       'playlist:found': ({ found }) => this.update({ playlist: { ...this.state.playlist, found } }),
       'playlist:guessWindow': ({ endsAt }) =>
@@ -284,6 +297,31 @@ export class GameSession {
     void this.playSnippet(snippet.durationMs);
   }
 
+  /**
+   * Plus ou moins : choix définitif pour la nouvelle chanson (au tour 1 : `higher` =
+   * B plus populaire que A). Affiché tout de suite, annulé si le serveur refuse.
+   */
+  async pickHigherLower(pick: HigherLowerPick): Promise<void> {
+    const { higherLower, round, phase } = this.state;
+    if (!higherLower || higherLower.yourPick || phase !== 'listening') return;
+    this.update({ higherLower: { ...higherLower, yourPick: pick } });
+    const ok = await socket
+      .timeout(5000)
+      .emitWithAck('higherLower:pick', { pick })
+      .catch(() => false);
+    if (!ok && !this.disposed && this.state.round === round && this.state.higherLower) {
+      this.update({ higherLower: { ...this.state.higherLower, yourPick: null } });
+    }
+  }
+
+  /** Plus ou moins : réécoute libre d'une chanson du tour (la référence ou la nouvelle). */
+  replayClip(index: number): void {
+    const { round, phase } = this.state;
+    const allowed = round === 1 ? [0, 1] : [round - 1, round];
+    if (phase !== 'listening' || !this.isHigherLower || !allowed.includes(index)) return;
+    void this.playClip(index, 0);
+  }
+
   /** Mode Progressif : réécouter l'extrait du palier en cours. */
   replay(): void {
     if (this.isProgressive && this.state.phase === 'listening' && this.canAnswer()) {
@@ -348,7 +386,9 @@ export class GameSession {
     const listens = this.canAnswer() || this.state.playlist.ownSong;
     if (this.state.phase !== 'listening' || !listens) return;
     if (this.isProgressive) void this.playTier();
-    else if (this.listenStart?.round === this.state.round) {
+    else if (this.isHigherLower && this.listenStart?.round === this.state.round) {
+      this.scheduleClips(this.state.round, this.listenStart.startedAt);
+    } else if (this.listenStart?.round === this.state.round) {
       this.audio.play(this.state.round, this.listenStart.startedAt);
     }
   }
@@ -365,6 +405,7 @@ export class GameSession {
     if (this.kind === 'solo' && this.state.status === 'playing') socket.emit('game:leave');
     this.detach();
     this.clearSnippetTimer();
+    this.clearClipTimers();
     this.audio.stopAll();
     this.video.release();
   }
@@ -378,7 +419,8 @@ export class GameSession {
       // Arrivée en cours d'écoute (Classique) : on rattrape l'extrait là où il en est.
       if (ok && this.pendingResume?.round === round && this.state.phase === 'listening') {
         this.listenStart = this.pendingResume;
-        if (!this.isProgressive) this.audio.play(round, this.pendingResume.startedAt);
+        if (this.isHigherLower) this.scheduleClips(round, this.pendingResume.startedAt);
+        else if (!this.isProgressive) this.audio.play(round, this.pendingResume.startedAt);
         this.pendingResume = null;
       }
     });
@@ -403,6 +445,7 @@ export class GameSession {
         ? { status: 'correct', wrongCount: 0, points: 0, seasonExact: false, sequenceExact: false }
         : { status: 'idle', wrongCount: 0 },
       auction: null,
+      higherLower: snapshot.higherLower,
     });
     if (snapshot.auction) this.onAuctionState(snapshot.round, snapshot.auction);
     if (snapshot.phase === 'listening' && snapshot.listenStartedAt !== null) {
@@ -413,8 +456,10 @@ export class GameSession {
 
   private onCountdown(round: number, phaseEndsAt: number): void {
     this.audio.fadeOut(this.state.round);
+    if (this.state.clip) this.audio.fadeOut(this.state.clip.index);
     this.video.release();
     this.clearSnippetTimer();
+    this.clearClipTimers();
     this.update({
       phase: 'countdown',
       round,
@@ -427,6 +472,8 @@ export class GameSession {
       // Nouvelle manche : les coches « a trouvé » de la précédente disparaissent.
       players: this.state.players.map((player) => ({ ...player, found: false })),
       auction: null,
+      higherLower: null,
+      clip: null,
     });
     // Cloche « attention », puis un tic à chaque seconde restante.
     sfx.bell();
@@ -453,7 +500,11 @@ export class GameSession {
       playlist: { ...this.state.playlist, ownSong },
     });
     const startTime = this.audio.startTime(round) ?? 0;
-    if (this.isProgressive) {
+    if (this.isHigherLower) {
+      // Pas de vidéo : A puis B (tour 1), ou la nouvelle chanson, à l'heure du serveur.
+      this.listenStart = { round, startedAt };
+      this.scheduleClips(round, startedAt);
+    } else if (this.isProgressive) {
       // Premier palier joué automatiquement ; la vidéo se précharge au début de l'extrait.
       void this.playTier();
       this.video.preload(round, videoUrl, startTime);
@@ -586,6 +637,57 @@ export class GameSession {
 
   private get isAuction(): boolean {
     return this.state.settings.mode === 'auction';
+  }
+
+  private get isHigherLower(): boolean {
+    return this.state.settings.mode === 'higherLower';
+  }
+
+  /**
+   * Plus ou moins : programme les extraits du tour à partir de `startedAt` (heure
+   * serveur) — A puis B au tour 1, sinon la nouvelle chanson. Un extrait déjà
+   * commencé (arrivée en retard) reprend en cours de route.
+   */
+  private scheduleClips(round: number, startedAt: number): void {
+    this.clearClipTimers();
+    const clips = round === 1 ? [0, 1] : [round];
+    clips.forEach((index, position) => {
+      const delay = startedAt + position * HIGHER_LOWER.snippetMs - serverNow();
+      const offsetMs = Math.max(0, -delay);
+      if (offsetMs >= HIGHER_LOWER.snippetMs) return;
+      this.clipTimers.push(
+        window.setTimeout(
+          () => {
+            if (this.state.round === round && this.state.phase === 'listening') {
+              void this.playClip(index, offsetMs);
+            }
+          },
+          Math.max(0, delay),
+        ),
+      );
+    });
+  }
+
+  /** Plus ou moins : joue l'extrait de 10 s d'une chanson (la référence reste chargée). */
+  private async playClip(index: number, offsetMs: number): Promise<void> {
+    const round = this.state.round;
+    const snippet = ++this.snippetCount;
+    this.update({
+      snippetPlaying: true,
+      clip: { index, endsAt: serverNow() + HIGHER_LOWER.snippetMs - offsetMs },
+    });
+    await this.audio.playSnippet(index, HIGHER_LOWER.snippetMs, {
+      offsetMs,
+      keepFrom: Math.max(0, round - 1),
+    });
+    if (!this.disposed && snippet === this.snippetCount && this.state.round === round) {
+      this.update({ snippetPlaying: false, clip: null });
+    }
+  }
+
+  private clearClipTimers(): void {
+    for (const timer of this.clipTimers) window.clearTimeout(timer);
+    this.clipTimers = [];
   }
 
   /** Le joueur peut encore répondre (pas trouvé, pas éliminé, pas abandonné, pas sa chanson). */

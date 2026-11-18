@@ -1,5 +1,11 @@
 import { AUCTION, type AuctionResult, type AuctionTurn, type AuctionView } from './auction';
 import { THEME_TYPES, type PopularityTier, type ThemeFilters, type ThemeType } from './catalogue';
+import {
+  HIGHER_LOWER,
+  type HigherLowerPick,
+  type HigherLowerReveal,
+  type HigherLowerView,
+} from './higherLower';
 import { PLAYLIST, type PlaylistReveal } from './playlist';
 
 /**
@@ -7,11 +13,18 @@ import { PLAYLIST, type PlaylistReveal } from './playlist';
  * - `classic` : 15 s d'écoute continue, points selon la rapidité ;
  * - `progressive` : extraits de plus en plus longs (façon Songspot), points selon le palier ;
  * - `playlist` : (multi) les joueurs choisissent les chansons, jouées avec les règles du Classique ;
- * - `auction` : (multi) chacun annonce la durée d'extrait qu'il lui faut, le plus audacieux répond.
+ * - `auction` : (multi) chacun annonce la durée d'extrait qu'il lui faut, le plus audacieux répond ;
+ * - `higherLower` : la nouvelle chanson vient-elle d'un anime plus ou moins populaire ? (élimination).
  */
-export type GameModeId = 'classic' | 'progressive' | 'playlist' | 'auction';
-export const GAME_MODES: readonly GameModeId[] = ['classic', 'progressive', 'playlist', 'auction'];
-export const SOLO_MODES: readonly GameModeId[] = ['classic', 'progressive'];
+export type GameModeId = 'classic' | 'progressive' | 'playlist' | 'auction' | 'higherLower';
+export const GAME_MODES: readonly GameModeId[] = [
+  'classic',
+  'progressive',
+  'higherLower',
+  'playlist',
+  'auction',
+];
+export const SOLO_MODES: readonly GameModeId[] = ['classic', 'progressive', 'higherLower'];
 export const ROOM_MODES: readonly GameModeId[] = GAME_MODES;
 
 /** Joueurs connectés nécessaires pour lancer une partie dans ce mode. */
@@ -35,7 +48,19 @@ export const MODE_TIMINGS: Record<GameModeId, ModeTiming> = {
   playlist: { countdownMs: 3000, listenMs: 15_000, revealMs: 10_000 },
   // Enchères : `listenMs` = temps de réponse de celui qui a la main (voir AUCTION).
   auction: { countdownMs: 3000, listenMs: AUCTION.answerMs, revealMs: 10_000 },
+  // Plus ou moins : `listenMs` = un tour après le premier (10 s d'extrait + 10 s pour choisir).
+  higherLower: {
+    countdownMs: 3000,
+    listenMs: HIGHER_LOWER.snippetMs + HIGHER_LOWER.chooseMs,
+    revealMs: 6000,
+  },
 };
+
+/**
+ * Index de la première manche. En Plus ou moins, la manche N est le tour N : la
+ * chanson 0 (A) ne sert que de première référence.
+ */
+export const firstRound = (mode: GameModeId): number => (mode === 'higherLower' ? 1 : 0);
 
 /** Mode Progressif : durée des extraits, points et essais par palier. */
 export const PROGRESSIVE = {
@@ -80,7 +105,10 @@ export const POPULARITY_TIERS: readonly PopularityTier[] = [100, 500, 2000, 'all
 
 export interface GameSettings {
   mode: GameModeId;
-  /** Nombre de manches (ignoré en Playlist : toutes les chansons choisies sont jouées). */
+  /**
+   * Nombre de manches (ignoré en Playlist, où toutes les chansons choisies sont jouées,
+   * et en Plus ou moins, qui dure jusqu'à l'élimination).
+   */
   rounds: number;
   /** Filtres du tirage (en Playlist : complément aléatoire ; seul le type s'applique aux choix). */
   filters: ThemeFilters;
@@ -170,6 +198,11 @@ export interface PlayerScore {
   /** A trouvé la bonne réponse pendant la manche en cours. */
   found: boolean;
   connected: boolean;
+  /**
+   * Plus ou moins : tour où le joueur a été éliminé (0 : arrivé en cours de partie,
+   * il regarde) ; absent tant qu'il est en jeu. `score` compte ses bonnes réponses.
+   */
+  eliminatedAt?: number;
 }
 
 /** Audio d'une manche, envoyé à l'avance pour le préchargement. */
@@ -203,6 +236,8 @@ export interface GameSnapshot {
   playlist: PlaylistRoundView | null;
   /** Mode Enchères : manche en cours vue par le joueur. */
   auction: AuctionView | null;
+  /** Mode Plus ou moins : tour en cours vu par le joueur. */
+  higherLower: HigherLowerView | null;
 }
 
 /** Manche en cours du mode Playlist, vue par un joueur (rien sur les choix des autres). */
@@ -243,6 +278,8 @@ export interface PlayerRoundResult {
   playlist?: PlaylistPoints;
   /** Mode Enchères : annonce et issue (`points` est alors négatif en cas d'erreur). */
   auction?: AuctionResult;
+  /** Mode Plus ou moins : choix du joueur (null : pas de réponse). */
+  higherLower?: { pick: HigherLowerPick | null };
 }
 
 export interface LocalizedTitle {
@@ -276,6 +313,8 @@ export interface RoundReveal {
   playlist?: PlaylistReveal;
   /** Mode Enchères : ordre de passage final, avec les propositions fausses. */
   auction?: AuctionTurn[];
+  /** Mode Plus ou moins : les deux chansons, l'écart, les choix et les éliminations. */
+  higherLower?: HigherLowerReveal;
 }
 
 export type AnswerResult =

@@ -16,7 +16,7 @@ Ce qui ne nous différencie PAS : multi temps réel, filtres, révélation vidé
 
 ## Concepts validés
 
-Les modes Playlist des joueurs et Enchères sont passés dans DECISIONS.md (v2).
+Les modes Playlist des joueurs, Enchères et Plus ou moins sont passés dans DECISIONS.md (v2).
 
 ### Mode Soirée (style Kahoot)
 

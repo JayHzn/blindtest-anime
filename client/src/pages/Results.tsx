@@ -4,9 +4,10 @@ import { Card } from '../components/ui/Card';
 import type { SessionState } from '../game/GameSession';
 import { useI18n } from '../i18n/context';
 import { formatScore } from '../lib/score';
+import { HigherLowerResults } from './HigherLowerResults';
 import styles from './Results.module.css';
 
-type ResultsActions =
+export type ResultsActions =
   | { kind: 'solo'; onReplay: () => void; onSettings: () => void; onHome: () => void }
   | { kind: 'room'; onBackToLobby: () => void; onLeave: () => void };
 
@@ -20,6 +21,9 @@ const PODIUM = [styles.gold, styles.silver, styles.bronze];
 
 export function Results({ state, actions }: ResultsProps) {
   const { t, lang } = useI18n();
+  if (state.settings.mode === 'higherLower') {
+    return <HigherLowerResults state={state} actions={actions} />;
+  }
   const me = state.players.find((player) => player.id === state.you);
   const score = me?.score ?? 0;
   const found = state.history.filter(
@@ -47,30 +51,7 @@ export function Results({ state, actions }: ResultsProps) {
           {!isRecord && previousBest !== null ? (
             <p className={styles.best}>{t('results.previousBest', { score: previousBest })}</p>
           ) : null}
-          <div className={styles.actions}>
-            {actions.kind === 'solo' ? (
-              <>
-                <Button size="lg" onClick={actions.onReplay}>
-                  {t('results.replay')}
-                </Button>
-                <Button size="lg" variant="secondary" onClick={actions.onSettings}>
-                  {t('results.settings')}
-                </Button>
-                <Button variant="ghost" onClick={actions.onHome}>
-                  {t('results.home')}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button size="lg" onClick={actions.onBackToLobby}>
-                  {t('results.backToLobby')}
-                </Button>
-                <Button variant="ghost" onClick={actions.onLeave}>
-                  {t('room.leave')}
-                </Button>
-              </>
-            )}
-          </div>
+          <ResultActions actions={actions} />
         </Card>
 
         {state.players.length > 1 ? (
@@ -127,6 +108,37 @@ export function Results({ state, actions }: ResultsProps) {
           </Card>
         ) : null}
       </main>
+    </div>
+  );
+}
+
+/** Rejouer / réglages / accueil (solo), ou retour au salon (room). */
+export function ResultActions({ actions }: { actions: ResultsActions }) {
+  const { t } = useI18n();
+  return (
+    <div className={styles.actions}>
+      {actions.kind === 'solo' ? (
+        <>
+          <Button size="lg" onClick={actions.onReplay}>
+            {t('results.replay')}
+          </Button>
+          <Button size="lg" variant="secondary" onClick={actions.onSettings}>
+            {t('results.settings')}
+          </Button>
+          <Button variant="ghost" onClick={actions.onHome}>
+            {t('results.home')}
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button size="lg" onClick={actions.onBackToLobby}>
+            {t('results.backToLobby')}
+          </Button>
+          <Button variant="ghost" onClick={actions.onLeave}>
+            {t('room.leave')}
+          </Button>
+        </>
+      )}
     </div>
   );
 }
