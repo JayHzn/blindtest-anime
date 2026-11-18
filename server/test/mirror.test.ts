@@ -34,12 +34,17 @@ describe('AudioMirror', () => {
     expect(mirror.isMirrorUrl('/api/audio/abc')).toBe(false);
   });
 
-  it('garde la liste précédente si le miroir est injoignable', async () => {
+  it('garde la liste précédente si le miroir est injoignable, et dit pourquoi', async () => {
     const mirror = await mirrorWith([1011]);
-    await mirror.refresh((async () => {
+    const failure = await mirror.refresh((async () => {
       throw new Error('réseau');
     }) as unknown as typeof fetch);
+    expect(failure).toContain('réseau');
     expect(mirror.size).toBe(1);
+    const refused = await mirror.refresh(
+      (async () => new Response('bloqué', { status: 403 })) as unknown as typeof fetch,
+    );
+    expect(refused).toBe('réponse 403 (bloqué)');
   });
 });
 

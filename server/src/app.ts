@@ -59,7 +59,10 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
         ? new AudioMirror(config.mirrorUrl, config.mirrorSecret)
         : null;
   if (mirror && options.mirror === undefined) {
-    mirror.start((count) => fastify.log.info(`Miroir audio : ${count} chansons copiées`));
+    mirror.start({
+      info: (message) => fastify.log.info(message),
+      warn: (message) => fastify.log.warn(message),
+    });
   }
   registerCatalogueRoutes(fastify, catalogue);
   registerMediaRoutes(fastify, media);
