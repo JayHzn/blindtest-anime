@@ -19,6 +19,8 @@ export class AudioMirror {
   private themes = new Set<number>();
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
+  /** Raison du dernier échec de lecture de la liste (null : dernière lecture réussie). */
+  lastError: string | null = null;
 
   constructor(
     private readonly baseUrl: string,
@@ -80,6 +82,7 @@ export class AudioMirror {
     let retryMs = RETRY_FIRST_MS;
     const attempt = async () => {
       const failure = await this.refresh();
+      this.lastError = failure;
       if (this.stopped) return;
       if (failure === null) {
         log.info(`Miroir audio : ${this.size} chansons copiées`);

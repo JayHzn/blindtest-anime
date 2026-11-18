@@ -47,4 +47,6 @@
 
 ### Questions en suspens
 
-- **Retirer le passage de l'audio par le serveur une fois tout copié ?** Pas complètement : le miroir ne tient que le top 2000 dans les 10 Go gratuits (le catalogue entier ferait environ 16 Go), et le passage par le serveur sert de secours si un fichier du miroir ne se charge pas. Il ne coûte rien tant qu'il ne sert pas. Option possible plus tard : limiter le réglage « Tout » aux chansons copiées.
+- **Retirer le passage de l'audio par le serveur une fois tout copié ?** Pas complètement : le miroir ne tient que le top 2000 dans les 10 Go gratuits (le catalogue entier ferait environ 16 Go), et le passage par le serveur sert de secours si un fichier du miroir ne se charge pas. Il ne coûte rien tant qu'il ne sert pas.
+  - **Décidé le 2026-11-18 : on reste sur l'offre gratuite** (top 2000 sur R2 ; avec le réglage « Tout », les chansons au-delà passent par Render).
+  - Tarifs R2 vérifiés le même jour (https://developers.cloudflare.com/r2/pricing/) : gratuit chaque mois 10 Go stockés, 1 million d'écritures, 10 millions de lectures, sortie de données toujours gratuite ; au-delà 0,015 $ par Go et par mois. Tout copier (`all` dans le workflow) coûterait environ 0,09 $ par mois, si la bande passante Render venait à manquer.

@@ -43,14 +43,6 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
 
   await fastify.register(cors, { origin: [...config.clientOrigins] });
 
-  fastify.get('/api/health', async (): Promise<HealthResponse> => ({
-    status: 'ok',
-    version: config.version,
-    uptimeSeconds: Math.round(process.uptime()),
-    catalogueVersion: catalogue?.version ?? null,
-  }));
-
-  const media = new MediaRegistry();
   // Miroir audio : chargement de la liste des chansons copiées, puis relecture régulière.
   const mirror =
     options.mirror !== undefined
@@ -64,6 +56,15 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
       warn: (message) => fastify.log.warn(message),
     });
   }
+  fastify.get('/api/health', async (): Promise<HealthResponse> => ({
+    status: 'ok',
+    version: config.version,
+    uptimeSeconds: Math.round(process.uptime()),
+    catalogueVersion: catalogue?.version ?? null,
+    mirror: mirror ? { songs: mirror.size, error: mirror.lastError } : null,
+  }));
+
+  const media = new MediaRegistry();
   registerCatalogueRoutes(fastify, catalogue);
   registerMediaRoutes(fastify, media);
 
