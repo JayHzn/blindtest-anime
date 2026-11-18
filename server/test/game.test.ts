@@ -100,6 +100,45 @@ describe('Game — mode Classique', () => {
     expect(reveal.players[0]?.score).toBe(220);
   });
 
+  it('révélation : réponse validée, dernière proposition fausse, essais et bonus possibles', () => {
+    const t = setup();
+    t.game.start();
+    t.ready(0);
+    vi.advanceTimersByTime(countdownMs + 2000);
+    // Une erreur, puis la série (sans saison) avec un mauvais numéro.
+    t.game.answer('p1', { text: 'One Piece' });
+    const franchiseId = catalogue.franchiseOfTheme(1011)!;
+    t.game.answer('p1', {
+      text: 'Attaque',
+      pick: { kind: 'franchise', id: franchiseId },
+      sequence: 2,
+    });
+    vi.advanceTimersByTime(0);
+    const reveal = t.last<RoundReveal>('round:reveal');
+    expect(reveal.bonuses).toEqual({ season: true, sequence: true });
+    expect(reveal.results[0]).toMatchObject({
+      correct: true,
+      seasonExact: false,
+      sequenceExact: false,
+      attempts: 2,
+      answer: { kind: 'franchise', sequence: 2, title: { fr: "L'Attaque des Titans" } },
+    });
+
+    // Manche 2 : une proposition fausse, puis le temps passe.
+    vi.advanceTimersByTime(revealMs);
+    t.ready(1);
+    vi.advanceTimersByTime(countdownMs + 1000);
+    t.game.answer('p1', { text: 'Naruto' });
+    vi.advanceTimersByTime(listenMs);
+    const missed = t.last<RoundReveal>('round:reveal');
+    expect(missed.round).toBe(1);
+    expect(missed.results[0]).toMatchObject({
+      correct: false,
+      attempts: 1,
+      answer: { kind: 'text', title: { fr: 'Naruto' }, sequence: null },
+    });
+  });
+
   it('fixe un départ commun un peu dans le futur ; les points comptent depuis ce départ', () => {
     const events: Emitted[] = [];
     const game = new Game({

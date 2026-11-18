@@ -11,6 +11,7 @@ import { secondsLeft, useServerNow } from '../../hooks/useServerNow';
 import { useI18n } from '../../i18n/context';
 import { avatarColor } from '../../lib/avatar';
 import { isBuffered } from '../../lib/videoPreloader';
+import { AnswerRecap } from './AnswerRecap';
 import styles from './RevealPanel.module.css';
 
 /** Avance prise sur l'extrait quand la vidéo doit encore charger la bonne portion. */
@@ -73,12 +74,19 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
   }, [reveal.round, session]);
 
   const mine = reveal.results.find((result) => result.playerId === you);
+  const recap = Boolean(reveal.bonuses && mine && !mine.auction && !mine.playlist?.ownSong);
   const title = reveal.anime.title[lang];
   const seconds = secondsLeft(reveal.phaseEndsAt, now);
   const showCard = !hasVideo || failed || !playing;
 
   return (
-    <div className={[styles.panel, reveal.playlist ? styles.withPlaylist : ''].join(' ')}>
+    <div
+      className={[
+        styles.panel,
+        reveal.playlist ? styles.withPlaylist : '',
+        recap ? styles.withRecap : '',
+      ].join(' ')}
+    >
       <div className={styles.media}>
         <div ref={host} className={styles.videoHost} />
         {/* Jaquette tant que la vidéo charge, ou à sa place si elle échoue. */}
@@ -117,8 +125,11 @@ export function RevealPanel({ reveal, session, you, isLastRound }: RevealPanelPr
 
         {reveal.playlist ? <PlaylistBanner reveal={reveal} you={you} /> : null}
 
+        {/* Ta réponse face à la bonne, et détail des points (modes où l'on tape un titre). */}
+        {recap && mine ? <AnswerRecap reveal={reveal} result={mine} /> : null}
+
         <div className={styles.footer}>
-          {mine?.auction ? (
+          {recap ? null : mine?.auction ? (
             <AuctionOutcome result={mine} />
           ) : mine?.playlist?.ownSong ? (
             <span className={[styles.result, styles.own].join(' ')}>

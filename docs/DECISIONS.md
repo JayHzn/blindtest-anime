@@ -91,6 +91,12 @@ Validé le 2026-11-17.
 - Bonus de précision (indépendants de la rapidité, uniquement si l'anime est correct) :
   - +25 saison exacte (proposé seulement si la franchise a plusieurs entrées)
   - +25 bon numéro d'OP/ED (champ facultatif)
+- Révélation (Classique, Progressif, Playlist), décidé le 2026-11-18 (maquette : https://claude.ai/artifact/8SfK3SbnNKSUoGZeb63nUT) :
+  - « Ta réponse » face à « Bonne réponse » : ce qui est juste en menthe, ce qui diffère en rose ; la série choisie sans saison s'affiche « (série) » ;
+  - détail des points : rapidité (ou palier), puis les bonus possibles sur cette chanson, gagnés, ou manqués en grisé avec la bonne valeur (« c'était la Saison 3 ») ;
+  - pas trouvé : « Ta dernière proposition » et le nombre d'essais ;
+  - la réponse est gardée par le serveur dans le résultat de la manche, le temps de la partie (reconnexion comprise), puis effacée avec elle ;
+  - quand ce détail est affiché, la vidéo rapetisse (40 % de la hauteur de l'écran) pour que les points restent visibles sans défiler.
 - Choisir une suggestion (clic ou Entrée) l'inscrit dans le champ et passe la main au numéro d'OP/ED ; on valide ensuite (Entrée ou « Valider »). Validée tout de suite si le numéro est déjà tapé, si l'anime n'a qu'un opening et qu'un ending (indicateur `u` de l'index des titres ; le champ du numéro est alors masqué), ou sans bonus (Enchères, Imposteur).
 - Anime à un seul opening et un seul ending : jamais de bonus de numéro (le numéro est évident), même tapé à la main (décidé le 2026-11-18).
 

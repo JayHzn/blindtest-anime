@@ -278,6 +278,16 @@ export interface PlaylistPoints {
   chooserPoints: number;
 }
 
+/** Réponse d'un joueur, telle qu'on la montre à la révélation. */
+export interface PlayerAnswer {
+  /** Titre choisi dans les suggestions, ou texte tapé. */
+  title: LocalizedTitle;
+  /** `franchise` : la série entière (sans saison) ; `text` : texte tapé sans suggestion. */
+  kind: 'anime' | 'franchise' | 'text';
+  /** Numéro d'OP/ED donné (`null` : pas donné). */
+  sequence: number | null;
+}
+
 export interface PlayerRoundResult {
   playerId: string;
   correct: boolean;
@@ -294,6 +304,21 @@ export interface PlayerRoundResult {
   auction?: AuctionResult;
   /** Mode Plus ou moins : choix du joueur (null : pas de réponse). */
   higherLower?: { pick: HigherLowerPick | null };
+  /**
+   * Classique, Progressif, Playlist : la réponse validée (trouvé) ou la dernière
+   * proposition (pas trouvé ; `null` : aucune). Gardée le temps de la partie.
+   */
+  answer?: PlayerAnswer | null;
+  /** Nombre de réponses envoyées pendant la manche. */
+  attempts?: number;
+}
+
+/** Bonus de précision possibles sur la chanson de la manche. */
+export interface RoundBonuses {
+  /** Saison exacte : la série a plusieurs entrées. */
+  season: boolean;
+  /** Numéro d'OP/ED : l'anime a plusieurs openings ou plusieurs endings. */
+  sequence: boolean;
 }
 
 export interface LocalizedTitle {
@@ -329,6 +354,8 @@ export interface RoundReveal {
   };
   results: PlayerRoundResult[];
   players: PlayerScore[];
+  /** Classique, Progressif, Playlist : bonus de précision possibles sur cette chanson. */
+  bonuses?: RoundBonuses;
   /** Mode Playlist : qui a choisi la chanson, paris, points. */
   playlist?: PlaylistReveal;
   /** Mode Enchères : ordre de passage final, avec les propositions fausses. */

@@ -23,6 +23,15 @@
   width: min(100%, calc(40vh * 16 / 9));
 }
 
+/* Ta réponse face à la bonne : idem, pour que les points restent visibles sans défiler. */
+.withRecap .media {
+  width: min(100%, calc(40vh * 16 / 9));
+}
+
+.withPlaylist.withRecap .media {
+  width: min(100%, calc(32vh * 16 / 9));
+}
+
 .videoHost {
   position: absolute;
   inset: 0;

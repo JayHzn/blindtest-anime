@@ -31,6 +31,7 @@ import {
   type ImpostorSong,
   type LocalizedTitle,
   type ModeTiming,
+  type PlayerAnswer,
   type PlayerRoundResult,
   type PlayerScore,
   type PlaylistReveal,
@@ -105,6 +106,10 @@ interface RoundState {
    */
   starts: Map<string, number>;
   results: Map<string, PlayerRoundResult>;
+  /** Dernière proposition fausse de chaque joueur (montrée à la révélation s'il ne trouve pas). */
+  lastAnswers: Map<string, PlayerAnswer>;
+  /** Réponses envoyées par chaque joueur pendant la manche. */
+  attempts: Map<string, number>;
   /** Mode Progressif : palier et essais de chaque joueur. */
   progress: Map<string, TierProgress>;
   /** Playlist : joueurs qui ont choisi la chanson (vide : tirée au hasard). Ils ne répondent pas. */
@@ -511,8 +516,13 @@ export class Game {
 
     const elapsedMs = Math.max(0, Date.now() - startedAt);
     const verdict = this.catalogue.validate(round.theme.id, payload);
+    // Gardée pour la révélation (ta réponse face à la bonne), le temps de la partie.
+    const given = this.playerAnswer(payload);
+    const attempts = (round.attempts.get(playerId) ?? 0) + 1;
+    round.attempts.set(playerId, attempts);
 
     if (!verdict.correct) {
+      round.lastAnswers.set(playerId, given);
       if (progress) this.registerMistake(progress);
       if (progress?.eliminated) this.sendVideo(round, playerId);
       // Éliminé au dernier palier : la manche peut se terminer si tout le monde a fini.
@@ -544,6 +554,8 @@ export class Game {
       seasonExact: verdict.seasonExact,
       sequenceExact: verdict.sequenceExact,
       tier: progress?.tier ?? null,
+      answer: given,
+      attempts,
     });
 
     this.announceFound(round, playerId);
@@ -991,6 +1003,15 @@ export class Game {
     };
   }
 
+  /** Réponse d'un joueur pour la révélation : titre choisi (ou texte tapé) et numéro. */
+  private playerAnswer(payload: AnswerPayload): PlayerAnswer {
+    return {
+      title: this.guessTitle(payload),
+      kind: payload.pick?.kind ?? 'text',
+      sequence: payload.sequence ?? null,
+    };
+  }
+
   /** Proposition d'un joueur telle qu'on l'affiche aux autres (titre choisi, ou texte tapé). */
   private guessTitle(payload: AnswerPayload): LocalizedTitle {
     const { pick } = payload;
@@ -1236,6 +1257,8 @@ export class Game {
       participants: new Set(),
       starts: new Map(),
       results: new Map(),
+      lastAnswers: new Map(),
+      attempts: new Map(),
       progress: new Map(),
       choosers: [...choosers],
       guesses: new Map(),
@@ -1290,6 +1313,8 @@ export class Game {
     const anime = this.catalogue.getAnime(theme.animeId)!;
     const franchise = this.catalogue.getFranchise(anime.franchiseId)!;
     const { auction, impostor } = round;
+    // Modes où l'on tape un titre (Classique, Progressif, Playlist) : réponse et bonus possibles.
+    const answersTitles = !auction && !impostor && !this.isHigherLower;
     const results = [...this.players.values()].map(
       (player): PlayerRoundResult =>
         auction?.resultFor(player.id) ??
@@ -1302,6 +1327,10 @@ export class Game {
           seasonExact: false,
           sequenceExact: false,
           tier: null,
+          ...(answersTitles && {
+            answer: round.lastAnswers.get(player.id) ?? null,
+            attempts: round.attempts.get(player.id) ?? 0,
+          }),
         },
     );
     return {
@@ -1336,6 +1365,7 @@ export class Game {
       },
       results,
       players: this.scoreboard(),
+      ...(answersTitles && { bonuses: this.catalogue.bonusesFor(theme.id) }),
       ...(auction && { auction: auction.turns() }),
       ...(impostor &&
         round.impostorTheme &&

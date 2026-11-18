@@ -10,6 +10,7 @@ import {
   type AnswerPayload,
   type AnswerVerdict,
   type CatalogueStats,
+  type RoundBonuses,
   type ThemeFilters,
   type TitleEntry,
   type TitleIndex,
@@ -360,6 +361,18 @@ export class Catalogue {
     const sequenceExact =
       correct && answer.sequence === theme.sequence && !this.singleThemeAnime(target.id);
     return { correct, seasonExact, sequenceExact };
+  }
+
+  /** Bonus de précision possibles sur une musique (mêmes règles que `validate`). */
+  bonusesFor(themeId: number): RoundBonuses {
+    const theme = this.themes.get(themeId);
+    const anime = theme ? this.anime.get(theme.animeId) : undefined;
+    const franchise = anime ? this.franchises.get(anime.franchiseId) : undefined;
+    if (!anime || !franchise) return { season: false, sequence: false };
+    return {
+      season: franchise.animeIds.length > 1,
+      sequence: !this.singleThemeAnime(anime.id),
+    };
   }
 
   /** L'anime n'a qu'un opening et qu'un ending (le numéro d'OP/ED est évident). */
