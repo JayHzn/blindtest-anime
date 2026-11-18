@@ -40,16 +40,18 @@
 
 ### À faire
 
-1. **Sauvegarder `server/.env.r2`** (dans un gestionnaire de mots de passe par exemple) : le dépôt de travail est dans le dossier `Temp` de Windows, qui peut être vidé, et ce fichier n'est jamais commité. Sans `MIRROR_SECRET`, plus aucun fichier du miroir ne serait retrouvable (GitHub ne permet pas de relire un secret ; Render l'affiche dans Environment).
+1. **Clés du miroir** : `MIRROR_SECRET` (irremplaçable : sans elle, plus aucun fichier du miroir n'est retrouvable) est sauvegardée dans Render (`anilind-api` → Environment, valeur réaffichable) — vérifier qu'elle s'y affiche bien. Les clés R2 se recréent en 2 minutes dans Cloudflare si besoin. `server/.env.r2` n'existe que sur le PC de travail (dossier `Temp`, jamais commité).
 2. **Vérifier que l'ancienne clé R2** (celle collée dans la conversation) est bien révoquée (Cloudflare → R2 → Manage R2 API Tokens).
 3. **Tests réels à plusieurs** :
    - vidéo de révélation avec 6 à 8 joueurs sur le **même Wi-Fi** (le CDN d'AnimeThemes peut refuser des requêtes : la jaquette reste alors affichée) ;
    - 3 ou 4 joueurs sur des **connexions différentes** (4G par exemple).
-4. **Mise en cache du Worker** : impossible sur une adresse `workers.dev` (il faudrait un nom de domaine) ; gain faible, laissé de côté.
-5. **Surveiller la bande passante Render** (tableau de bord → Bandwidth) une fois le miroir actif.
-6. **Maquette Imposteur** : le canevas n'a pas les deux dernières corrections (salon existant, carte « Ta chanson ») — l'accès en écriture avait été perdu ; le code, lui, les suit.
-7. **Nouveaux modes** : trancher les règles de « Quel est le bon OP ? » et « Chronologie », puis maquette, puis implémentation.
-8. **Likes et playlist** : commencer sans compte (likes dans le navigateur, export d'une liste pour Soundiiz ou TuneMyMusic).
+4. **Partie sur iPhone** : l'audio du miroir est en Ogg (Opus), comme celui d'AnimeThemes avant ; seul Chrome a été testé. Vérifier que le son se lance sur Safari iOS.
+5. **Test Imposteur de `e2e/`** : pas encore relancé depuis la correction de la langue des tests (`cd e2e && npx playwright test impostor.spec.ts`) ; les tests Classique et Plus ou moins passent.
+6. **Mise en cache du Worker** : impossible sur une adresse `workers.dev` (il faudrait un nom de domaine) ; gain faible, laissé de côté.
+7. **Surveiller la bande passante Render** (tableau de bord → Bandwidth) une fois le miroir actif.
+8. **Maquette Imposteur** : le canevas n'a pas les deux dernières corrections (salon existant, carte « Ta chanson ») — l'accès en écriture avait été perdu ; le code, lui, les suit.
+9. **Nouveaux modes** : trancher les règles de « Quel est le bon OP ? » et « Chronologie », puis maquette, puis implémentation.
+10. **Likes et playlist** : commencer sans compte (likes dans le navigateur, export d'une liste pour Soundiiz ou TuneMyMusic).
 
 ### Questions en suspens
 
