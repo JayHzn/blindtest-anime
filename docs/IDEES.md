@@ -30,6 +30,62 @@ Les modes Playlist des joueurs, Enchères, Plus ou moins et Imposteur sont pass�
 - **Mauvais choix crédibles** : même époque, même genre.
 - Sert aussi de base au mode Facile (QCM) de la feuille de route.
 
+### Mode Puzzle (coop)
+
+- **Principe** : chaque joueur entend un fragment différent de la même chanson. L'équipe se parle pour la reconstituer.
+- **Vocal** : pas de chat dans le jeu. Le lobby invite à lancer un vocal Discord.
+- **Fragments** :
+  - points de départ différents, répartis dans le morceau ;
+  - durée selon le nombre de joueurs : 2 s à 2 joueurs, 1 s à 6 et plus ;
+  - 3 écoutes maximum par fragment ;
+  - au bout de 20 s, les fragments s'allongent à 3 s (3 nouvelles écoutes), mais la manche rapporte moins.
+- **Réponses** : n'importe qui peut répondre, 2 essais par joueur et par manche.
+- **Vies** : 3 vies d'équipe. Une vie est perdue quand la chanson n'est pas trouvée (temps écoulé ou tous les essais utilisés).
+- **Deux variantes** :
+  - **Aventure** : 5 chapitres de 5 chansons, de plus en plus durs (top 100 → top 500 → top 2000 → tout le catalogue → tout le catalogue avec des fragments plus courts). Écran « Chapitre 2 » entre les chapitres, +1 vie (3 maximum).
+    - La dernière chanson du chapitre 5 est la « chanson finale » : fragments plus courts, écran de victoire si l'équipe la trouve.
+    - Un chapitre terminé est débloqué : on n'a pas à le refaire, la partie suivante peut commencer au chapitre suivant (avec 3 vies).
+    - Progression propre à chaque joueur. L'hôte choisit le chapitre de départ parmi ceux qu'il a débloqués ; chaque joueur qui termine un chapitre le débloque pour lui.
+  - **Survie** : sans fin, selon les filtres de la room, aucune vie regagnée. Record : nombre de chansons trouvées d'affilée.
+- **Progression et records** : gardés dans la base hébergée (voir « Stockage persistant »).
+- Multi uniquement, 2 joueurs minimum.
+
+### Défi du jour
+
+- **Format** : 5 chansons en Progressif (paliers 0,5 / 1 / 5 / 15 s).
+- **Difficulté croissante dans la semaine** : top 100 le lundi … tout le catalogue le dimanche.
+- **Règles** :
+  - les mêmes chansons pour tout le monde, renouvelées à minuit (heure de Paris) ;
+  - une seule tentative par jour ;
+  - les réponses ne sont visibles qu'après avoir joué.
+- **Partage** : grille d'emojis à copier dans Discord, avec le lien du site. 🟩 1er palier, 🟨 2e, 🟧 3e, 🟥 4e, ⬛ ratée.
+- **Groupes de potes** : créés via un lien. Ils montrent le score du jour de chaque membre et sa série de jours joués d'affilée.
+- Solo (chacun joue de son côté, on se compare ensuite).
+
+### Stockage persistant
+
+- Besoin : classement du Défi du jour, séries, progression de l'Aventure, records de Survie. Render gratuit n'a pas de disque persistant et les rooms sont en mémoire.
+- Choix : une petite base hébergée (Turso par exemple, du SQLite comme le catalogue). Offre gratuite à vérifier au moment de le faire.
+- Toujours sans compte : le joueur est reconnu par la clé déjà gardée dans son navigateur.
+- Seuls ces modes en dépendent ; le reste du site fonctionne sans elle.
+
+### Tournoi en duels
+
+- **Tableau** : élimination directe, 3 à 8 joueurs, tirage au sort. Si le nombre ne tombe pas juste, des joueurs tirés au hasard passent directement au 2e tour.
+- **Duel** : premier à 2 points (3 chansons maximum) ; finale au premier à 3. Environ 12 min à 8 joueurs.
+- **Buzzer** :
+  - le premier qui buzze coupe le son et a 5 s pour répondre (autocomplétion) ;
+  - bonne réponse : il marque le point ;
+  - mauvaise réponse : il est bloqué pour cette chanson, le son reprend, l'adversaire peut buzzer ;
+  - personne ne trouve : chanson suivante, aucun point.
+- **Équité** : le serveur départage les buzz en corrigeant le retard réseau de chacun (mesure d'horloge du multi).
+- **Spectateurs** :
+  - les duels se jouent l'un après l'autre, tout le monde regarde, entend le son et voit les buzz en direct ;
+  - ils peuvent taper leur réponse en silence, pour le fun ;
+  - avant chaque duel, ils parient sur le gagnant : +50 si c'est juste, dans un classement « meilleur parieur » à part.
+- **Petite finale** pour la 3e place : facultative, réglage de l'hôte.
+- Multi uniquement.
+
 ## Plus tard
 
 - **Mashup** : deux OP superposés, il faut trouver les deux. À faire seulement si le résultat est vraiment clean.

@@ -43,6 +43,9 @@ services:
         value: '22'
       - key: VITE_SERVER_URL
         value: https://anilind-api.onrender.com
+      # Connexion ouverte vers le miroir audio dès l'arrivée sur le site (preconnect).
+      - key: VITE_MIRROR_URL
+        value: https://anilind-audio.anilind.workers.dev
     headers:
       # Fichiers versionnés (hash dans le nom) : cache navigateur d'un an.
       - path: /assets/*

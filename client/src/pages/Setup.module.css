@@ -6,6 +6,36 @@
   padding: var(--space-6) var(--space-7);
 }
 
+/*
+ * Grand écran (≥ 1400 px, voir WIDE_QUERY dans Setup.tsx) : formulaire au centre,
+ * règles dans la marge de droite, alignées sous le choix de la langue.
+ */
+.layout {
+  width: 100%;
+}
+
+@media (min-width: 1400px) {
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 760px) minmax(0, 1fr);
+    column-gap: var(--space-5);
+    align-items: start;
+  }
+
+  .layout > .main {
+    grid-column: 2;
+  }
+}
+
+.aside {
+  grid-column: 3;
+  justify-self: end;
+  width: 100%;
+  max-width: 340px;
+  position: sticky;
+  top: var(--space-6);
+}
+
 .main {
   width: 100%;
   max-width: 760px;

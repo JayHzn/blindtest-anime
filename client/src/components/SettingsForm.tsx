@@ -12,6 +12,7 @@ import {
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n/context';
 import type { MessageKey } from '../i18n/fr';
+import { ModeRules } from './ModeRules';
 import { ChipGroup } from './ui/ChipGroup';
 import styles from './SettingsForm.module.css';
 
@@ -49,6 +50,8 @@ interface SettingsFormProps {
   disabled?: boolean;
   /** Modes proposés (les modes multi, Playlist et Enchères, n'existent qu'en room). */
   modes?: readonly GameModeId[];
+  /** Règles du mode dans la grille des modes (`false` : la page les affiche ailleurs). */
+  showRules?: boolean;
 }
 
 /** Réglages d'une partie : mode, manches, popularité, types, années. */
@@ -57,6 +60,7 @@ export function SettingsForm({
   onChange,
   disabled = false,
   modes = SOLO_MODES,
+  showRules = true,
 }: SettingsFormProps) {
   const { t } = useI18n();
   const grid = useRef<HTMLDivElement>(null);
@@ -106,7 +110,13 @@ export function SettingsForm({
     <div className={styles.form}>
       <section className={styles.section}>
         <h2 className={styles.label}>{t('setup.mode')}</h2>
-        <div ref={grid} className={styles.modes} role="radiogroup" aria-label={t('setup.mode')}>
+        <div
+          ref={grid}
+          className={styles.modes}
+          role="radiogroup"
+          aria-label={t('setup.mode')}
+          data-mode-grid=""
+        >
           {modes.map((mode) => (
             <button
               key={mode}
@@ -122,20 +132,9 @@ export function SettingsForm({
             </button>
           ))}
           {/* Règles du mode choisi, dans la place libre de la grille : visibles par tous. */}
-          <div
-            className={styles.rules}
-            style={{ gridColumn: `span ${rulesSpan}` }}
-            aria-live="polite"
-          >
-            <h3 className={styles.rulesTitle}>
-              {t('setup.rules')} · {t(`setup.mode.${settings.mode}`)}
-            </h3>
-            <ul className={styles.rulesList}>
-              {([1, 2, 3] as const).map((n) => (
-                <li key={n}>{t(`setup.rules.${settings.mode}.${n}`)}</li>
-              ))}
-            </ul>
-          </div>
+          {showRules ? (
+            <ModeRules mode={settings.mode} style={{ gridColumn: `span ${rulesSpan}` }} />
+          ) : null}
         </div>
       </section>
 
