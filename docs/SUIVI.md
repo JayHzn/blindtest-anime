@@ -28,9 +28,14 @@
 
 **Idées ajoutées** dans `docs/IDEES.md` (règles à trancher) : Quel est le bon OP ? (blindtest à l'envers), Chronologie, Likes et playlist (Spotify / YouTube Music).
 
+**En fin de journée**
+
+- **Miroir actif sur le site en ligne** (vérifié : tout l'audio d'une partie vient de R2, son en 2 à 9 ms). `/api/health` indique le nombre de chansons du miroir et la raison d'un éventuel échec (au début, la lecture de `index.json` échouait depuis Render ; réglé après l'ajout d'un en-tête `user-agent` et des nouveaux essais).
+- **Règles du mode choisi** affichées dans une carte, dans la place libre de la grille des modes (solo et salon, visibles par tous).
+- **Tests de bout en bout dans le dépôt** (`e2e/`, Playwright, hors des paquets installés par Render) : Classique (son avec le chrono, choix d'une suggestion), Plus ou moins (partie solo complète), Imposteur (manche à 4). Lancement : `cd e2e && npm install && npm run install-browser && npm test` (démarre le serveur et le site locaux si besoin ; catalogue et connexion Internet nécessaires).
+
 ### En cours
 
-- **Le miroir n'est pas encore actif sur le site en ligne** : le serveur Render affiche « 0 chansons copiées », la lecture de `index.json` échoue depuis Render (elle marche en local). Le dernier commit écrit la raison dans les logs et réessaie toutes les minutes, puis de plus en plus espacé. **À faire** : après le déploiement, chercher dans les logs Render de `anilind-api` une ligne « Miroir audio injoignable (…) » et transmettre la raison entre parenthèses (ou « Miroir audio : N chansons copiées » si c'est réglé tout seul).
 - **Workflow GitHub du top 2000** : vérifier qu'il se termine sans erreur (onglet Actions → « Miroir audio »), et la place utilisée sur R2 (tableau de bord Cloudflare → R2).
 
 ### À faire
@@ -40,10 +45,11 @@
 3. **Tests réels à plusieurs** :
    - vidéo de révélation avec 6 à 8 joueurs sur le **même Wi-Fi** (le CDN d'AnimeThemes peut refuser des requêtes : la jaquette reste alors affichée) ;
    - 3 ou 4 joueurs sur des **connexions différentes** (4G par exemple).
-4. **Surveiller la bande passante Render** (tableau de bord → Bandwidth) une fois le miroir actif.
-5. **Maquette Imposteur** : le canevas n'a pas les deux dernières corrections (salon existant, carte « Ta chanson ») — l'accès en écriture avait été perdu ; le code, lui, les suit.
-6. **Nouveaux modes** : trancher les règles de « Quel est le bon OP ? » et « Chronologie », puis maquette, puis implémentation.
-7. **Likes et playlist** : commencer sans compte (likes dans le navigateur, export d'une liste pour Soundiiz ou TuneMyMusic).
+4. **Mise en cache du Worker** : impossible sur une adresse `workers.dev` (il faudrait un nom de domaine) ; gain faible, laissé de côté.
+5. **Surveiller la bande passante Render** (tableau de bord → Bandwidth) une fois le miroir actif.
+6. **Maquette Imposteur** : le canevas n'a pas les deux dernières corrections (salon existant, carte « Ta chanson ») — l'accès en écriture avait été perdu ; le code, lui, les suit.
+7. **Nouveaux modes** : trancher les règles de « Quel est le bon OP ? » et « Chronologie », puis maquette, puis implémentation.
+8. **Likes et playlist** : commencer sans compte (likes dans le navigateur, export d'une liste pour Soundiiz ou TuneMyMusic).
 
 ### Questions en suspens
 

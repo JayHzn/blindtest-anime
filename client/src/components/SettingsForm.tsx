@@ -101,6 +101,17 @@ export function SettingsForm({
               <span className={styles.modeDesc}>{t(`setup.mode.${mode}.desc`)}</span>
             </button>
           ))}
+          {/* Règles du mode choisi, dans la place libre de la grille : visibles par tous. */}
+          <div className={styles.rules} aria-live="polite">
+            <h3 className={styles.rulesTitle}>
+              {t('setup.rules')} · {t(`setup.mode.${settings.mode}`)}
+            </h3>
+            <ul className={styles.rulesList}>
+              {([1, 2, 3] as const).map((n) => (
+                <li key={n}>{t(`setup.rules.${settings.mode}.${n}`)}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 

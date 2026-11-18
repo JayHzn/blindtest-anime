@@ -1,0 +1,13 @@
+{
+  "name": "@blindtest/e2e",
+  "private": true,
+  "type": "module",
+  "description": "Parties complètes jouées dans un vrai navigateur (Playwright). Hors des workspaces : Render ne l'installe pas.",
+  "scripts": {
+    "test": "playwright test",
+    "install-browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}

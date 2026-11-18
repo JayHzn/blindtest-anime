@@ -519,4 +519,35 @@ export const en: Record<MessageKey, string> = {
   'imp.end.bestWinsMany': '({n} rounds won)',
   'imp.end.civils': 'Civilians:',
   'imp.end.impostors': 'Impostors:',
+  // Rules shown below the mode choice
+  'setup.rules': 'Rules',
+  'setup.rules.classic.1': '15 s to name the anime, as many tries as you like.',
+  'setup.rules.classic.2': 'From 200 points (instant answer) down to 50 (last second).',
+  'setup.rules.classic.3': 'Bonus: +25 for the exact season, +25 for the right OP/ED number.',
+  'setup.rules.progressive.1':
+    'The clip gets longer: 0.5 s, then 1 s, 5 s and 15 s (60 s per round).',
+  'setup.rules.progressive.2':
+    '200, 150, 100 or 50 points depending on the step where you find it.',
+  'setup.rules.progressive.3': 'Replay freely, 3 tries per step; on the last one, you can give up.',
+  'setup.rules.higherLower.1':
+    'Is the new song from a more or less popular anime (AniList members) than the reference?',
+  'setup.rules.higherLower.2':
+    'Round 1: two songs, A then B. After that, the previous song becomes the reference.',
+  'setup.rules.higherLower.3':
+    'One mistake or no answer: you’re out. Last one in wins; solo, go for the longest streak.',
+  'setup.rules.playlist.1':
+    '3 players minimum. Everyone secretly picks songs, then everyone plays them as in Classic.',
+  'setup.rules.playlist.2': 'You find a player’s song: +50, and +50 if you guess who picked it.',
+  'setup.rules.playlist.3':
+    'When it’s your song, you don’t answer: +50 for each player who misses it.',
+  'setup.rules.auction.1': '2 players minimum. A hint shows up: type, year, genre.',
+  'setup.rules.auction.2':
+    'Secretly bid the clip length you need (0.5 to 10 s): the shortest bid gets the turn and answers alone.',
+  'setup.rules.auction.3': 'One try: from 300 to 50 points if right, from −150 to −25 if wrong.',
+  'setup.rules.impostor.1':
+    '4 players minimum. 1 or 2 impostors have a different, similar song; nobody knows their role.',
+  'setup.rules.impostor.2':
+    'Everyone gives one word about their song, then votes: the most voted is out and their role revealed.',
+  'setup.rules.impostor.3':
+    'Civilians: +100 if they find every impostor (+100 for guessing their song). Impostor: +300 if they last.',
 };

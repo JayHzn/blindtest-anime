@@ -525,6 +525,39 @@ export const fr = {
   'imp.end.bestWinsMany': '({n} manches gagnées)',
   'imp.end.civils': 'Civils :',
   'imp.end.impostors': 'Imposteurs :',
+  // Règles affichées sous le choix du mode
+  'setup.rules': 'Règles',
+  'setup.rules.classic.1': '15 s pour trouver l’anime, autant d’essais que tu veux.',
+  'setup.rules.classic.2': 'De 200 points (réponse immédiate) à 50 (dernière seconde).',
+  'setup.rules.classic.3': 'Bonus : +25 pour la saison exacte, +25 pour le bon numéro d’OP/ED.',
+  'setup.rules.progressive.1':
+    'L’extrait s’allonge : 0,5 s, puis 1 s, 5 s et 15 s (60 s par manche).',
+  'setup.rules.progressive.2': '200, 150, 100 ou 50 points selon le palier où tu trouves.',
+  'setup.rules.progressive.3':
+    'Réécoute libre, 3 essais par palier ; au dernier, tu peux abandonner.',
+  'setup.rules.higherLower.1':
+    'La nouvelle chanson vient-elle d’un anime plus ou moins populaire (membres AniList) que la référence ?',
+  'setup.rules.higherLower.2':
+    'Tour 1 : deux chansons, A puis B. Ensuite, la chanson précédente devient la référence.',
+  'setup.rules.higherLower.3':
+    'Une erreur ou pas de réponse : éliminé. Le dernier en jeu gagne ; en solo, vise la plus longue série.',
+  'setup.rules.playlist.1':
+    '3 joueurs minimum. Chacun choisit des chansons en secret, puis tout le monde les joue comme en Classique.',
+  'setup.rules.playlist.2':
+    'Tu trouves la chanson d’un joueur : +50, et +50 si tu devines qui l’a choisie.',
+  'setup.rules.playlist.3':
+    'Quand c’est ta chanson, tu ne réponds pas : +50 par joueur qui ne la trouve pas.',
+  'setup.rules.auction.1': '2 joueurs minimum. Un indice s’affiche : type, année, genre.',
+  'setup.rules.auction.2':
+    'Annonce en secret la durée d’extrait qu’il te faut (0,5 à 10 s) : la plus courte a la main et répond seule.',
+  'setup.rules.auction.3':
+    'Un seul essai : de 300 à 50 points si c’est juste, de −150 à −25 si c’est faux.',
+  'setup.rules.impostor.1':
+    '4 joueurs minimum. 1 ou 2 imposteurs ont une autre chanson, proche ; personne ne connaît son rôle.',
+  'setup.rules.impostor.2':
+    'Chacun donne un mot sur sa chanson, puis on vote : le plus voté est éliminé et son rôle révélé.',
+  'setup.rules.impostor.3':
+    'Civils : +100 s’ils démasquent tous les imposteurs (+100 pour deviner sa chanson). Imposteur : +300 s’il tient.',
 } as const;
 
 export type MessageKey = keyof typeof fr;

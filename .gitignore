@@ -16,3 +16,7 @@ server/data/*.db-*
 server/data/*.tmp
 # Réponses brutes des API (réutilisables avec --cached)
 server/data/cache/
+
+# Tests de bout en bout (Playwright) : résultats locaux
+e2e/test-results/
+e2e/playwright-report/
